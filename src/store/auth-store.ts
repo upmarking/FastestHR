@@ -52,7 +52,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               .from('profiles')
               .select('*')
               .eq('id', session.user.id)
-              .single();
+              .maybeSingle();
             if (data) set({ profile: data as unknown as Profile });
           }, 0);
         } else {
@@ -68,7 +68,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           .from('profiles')
           .select('*')
           .eq('id', session.user.id)
-          .single();
+          .maybeSingle();
         if (data) set({ profile: data as unknown as Profile });
       }
     } finally {
