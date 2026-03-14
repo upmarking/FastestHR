@@ -27,10 +27,11 @@ export default function ApplyLeave() {
   const { data: employee } = useQuery({
     queryKey: ['my-employee', profile?.id],
     queryFn: async () => {
+      if (!profile?.id) return null;
       const { data } = await supabase
         .from('employees')
         .select('id, first_name, last_name, company_id')
-        .eq('user_id', profile!.id)
+        .eq('user_id', profile.id)
         .is('deleted_at', null)
         .maybeSingle();
       return data;

@@ -17,10 +17,11 @@ export default function Settings() {
   const { data: company, isLoading } = useQuery({
     queryKey: ['my-company', profile?.company_id],
     queryFn: async () => {
+      if (!profile?.company_id) return null;
       const { data } = await supabase
         .from('companies')
         .select('*')
-        .eq('id', profile!.company_id!)
+        .eq('id', profile.company_id)
         .maybeSingle();
       return data;
     },
@@ -42,6 +43,7 @@ export default function Settings() {
 
   const updateMutation = useMutation({
     mutationFn: async () => {
+      if (!profile?.company_id) throw new Error("Company ID is missing.");
       const { error } = await supabase
         .from('companies')
         .update({
@@ -50,7 +52,7 @@ export default function Settings() {
           currency: form.currency,
           country: form.country,
         })
-        .eq('id', profile!.company_id!);
+        .eq('id', profile.company_id);
       if (error) throw error;
     },
     onSuccess: () => {
