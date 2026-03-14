@@ -1,0 +1,158 @@
+import { useLocation, Link } from 'react-router-dom';
+import {
+  LayoutDashboard, Users, Clock, CalendarDays, DollarSign, BarChart3,
+  Briefcase, GraduationCap, Headset, Megaphone, PieChart, Settings,
+  Globe, Building2, CreditCard, Server, ChevronLeft, LogOut, Zap
+} from 'lucide-react';
+import {
+  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
+  SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
+  SidebarFooter, SidebarHeader, useSidebar,
+} from '@/components/ui/sidebar';
+import { NavLink } from '@/components/NavLink';
+import { useAuthStore } from '@/store/auth-store';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Separator } from '@/components/ui/separator';
+
+const mainNav = [
+  { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
+  { title: 'Employees', url: '/employees', icon: Users },
+  { title: 'Attendance', url: '/attendance', icon: Clock },
+  { title: 'Leave', url: '/leave', icon: CalendarDays },
+  { title: 'Payroll', url: '/payroll', icon: DollarSign },
+  { title: 'Performance', url: '/performance', icon: BarChart3 },
+  { title: 'Recruitment', url: '/recruitment', icon: Briefcase },
+  { title: 'Learning', url: '/learning', icon: GraduationCap },
+  { title: 'Help Desk', url: '/helpdesk', icon: Headset },
+  { title: 'Announcements', url: '/announcements', icon: Megaphone },
+  { title: 'Reports', url: '/reports', icon: PieChart },
+  { title: 'Settings', url: '/settings', icon: Settings },
+];
+
+const superAdminNav = [
+  { title: 'Platform Overview', url: '/admin', icon: Globe },
+  { title: 'Companies', url: '/admin/companies', icon: Building2 },
+  { title: 'Subscriptions', url: '/admin/subscriptions', icon: CreditCard },
+  { title: 'System', url: '/admin/system', icon: Server },
+];
+
+export function AppSidebar() {
+  const { state, toggleSidebar } = useSidebar();
+  const collapsed = state === 'collapsed';
+  const location = useLocation();
+  const { profile, signOut } = useAuthStore();
+  const isSuperAdmin = profile?.platform_role === 'super_admin';
+
+  const isActive = (url: string) => {
+    if (url === '/dashboard') return location.pathname === '/dashboard';
+    return location.pathname.startsWith(url);
+  };
+
+  const initials = profile?.full_name
+    ?.split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'U';
+
+  return (
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="p-4">
+        <Link to="/dashboard" className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Zap className="h-4 w-4" />
+          </div>
+          {!collapsed && (
+            <span className="text-lg font-bold tracking-tight">FastestHR</span>
+          )}
+        </Link>
+      </SidebarHeader>
+
+      <Separator />
+
+      <SidebarContent className="px-2">
+        <SidebarGroup>
+          {!collapsed && <SidebarGroupLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Main</SidebarGroupLabel>}
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {mainNav.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.url)}
+                    tooltip={item.title}
+                  >
+                    <NavLink
+                      to={item.url}
+                      className="transition-colors"
+                      activeClassName="bg-primary/10 text-primary font-medium"
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {isSuperAdmin && (
+          <SidebarGroup>
+            <Separator className="mb-2" />
+            {!collapsed && <SidebarGroupLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Super Admin</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {superAdminNav.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive(item.url)}
+                      tooltip={item.title}
+                    >
+                      <NavLink
+                        to={item.url}
+                        className="transition-colors"
+                        activeClassName="bg-primary/10 text-primary font-medium"
+                      >
+                        <item.icon className="h-4 w-4 shrink-0" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+      </SidebarContent>
+
+      <SidebarFooter className="p-3">
+        <Separator className="mb-3" />
+        <div className="flex items-center gap-3">
+          <Avatar className="h-8 w-8 shrink-0">
+            <AvatarImage src={profile?.avatar_url || ''} />
+            <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          {!collapsed && (
+            <div className="flex flex-1 flex-col overflow-hidden">
+              <span className="truncate text-sm font-medium">{profile?.full_name}</span>
+              <Badge variant="secondary" className="w-fit text-[10px] capitalize">
+                {profile?.platform_role?.replace('_', ' ')}
+              </Badge>
+            </div>
+          )}
+          {!collapsed && (
+            <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={signOut}>
+              <LogOut className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}
