@@ -93,9 +93,9 @@ function CompanyAdminDashboard() {
       {/* Metric Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard title="Total Employees" value={loadingEmployees ? '...' : employeeCount} icon={Users} color="bg-primary/10 text-primary" />
-        <MetricCard title="Present Today" value="—" icon={Clock} color="bg-success/10 text-success" />
-        <MetricCard title="On Leave Today" value="—" icon={CalendarDays} color="bg-warning/10 text-warning" />
+        <MetricCard title="Pending Leaves" value={leaveRequests.length} icon={CalendarDays} color="bg-warning/10 text-warning" />
         <MetricCard title="Open Positions" value={openJobs} icon={Briefcase} color="bg-info/10 text-info" />
+        <MetricCard title="Announcements" value={announcements.length} icon={Megaphone} color="bg-success/10 text-success" />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
