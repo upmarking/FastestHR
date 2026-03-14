@@ -55,49 +55,23 @@ export default function Register() {
   const onSubmit = async (data: RegisterForm) => {
     setLoading(true);
     try {
-      const slug = data.companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
           data: {
             full_name: data.fullName,
             platform_role: 'company_admin',
+            company_name: data.companyName,
+            company_size: data.companySize,
+            company_industry: data.industry || null,
+            company_country: data.country || null,
           },
           emailRedirectTo: window.location.origin,
         },
       });
 
       if (authError) throw authError;
-
-      if (authData.user) {
-        // Create company
-        const { data: company, error: companyError } = await supabase
-          .from('companies')
-          .insert({
-            name: data.companyName,
-            slug: slug + '-' + Date.now().toString(36),
-            size: data.companySize,
-            industry: data.industry || null,
-            country: data.country || null,
-            plan: 'trial',
-          })
-          .select()
-          .single();
-
-        if (companyError) throw companyError;
-
-        // Update profile with company_id and role
-        await supabase
-          .from('profiles')
-          .update({
-            company_id: company.id,
-            platform_role: 'company_admin' as any,
-            full_name: data.fullName,
-          })
-          .eq('id', authData.user.id);
-      }
 
       toast.success('Account created! Please check your email to verify.');
       navigate('/login');
