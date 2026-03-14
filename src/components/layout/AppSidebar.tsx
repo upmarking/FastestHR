@@ -60,8 +60,8 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="p-4">
-        <Link to="/dashboard" className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+        <Link to="/dashboard" className="flex items-center gap-2.5 group">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary transition-all duration-300 group-hover:bg-primary group-hover:text-primary-foreground">
             <Zap className="h-4 w-4" />
           </div>
           {!collapsed && (
@@ -74,7 +74,7 @@ export function AppSidebar() {
 
       <SidebarContent className="px-2">
         <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Main</SidebarGroupLabel>}
+          {!collapsed && <SidebarGroupLabel className="font-display text-xs font-semibold uppercase tracking-wider text-muted-foreground">Main Systems</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
               {mainNav.map((item) => (
@@ -86,8 +86,8 @@ export function AppSidebar() {
                   >
                     <NavLink
                       to={item.url}
-                      className="transition-colors"
-                      activeClassName="bg-primary/10 text-primary font-medium"
+                      className="transition-all hover:text-primary font-medium"
+                      activeClassName="bg-primary/10 text-primary font-semibold rounded-md"
                     >
                       <item.icon className="h-4 w-4 shrink-0" />
                       {!collapsed && <span>{item.title}</span>}
@@ -102,7 +102,7 @@ export function AppSidebar() {
         {isSuperAdmin && (
           <SidebarGroup>
             <Separator className="mb-2" />
-            {!collapsed && <SidebarGroupLabel className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Super Admin</SidebarGroupLabel>}
+            {!collapsed && <SidebarGroupLabel className="font-display text-xs font-semibold uppercase tracking-wider text-muted-foreground">Admin Override</SidebarGroupLabel>}
             <SidebarGroupContent>
               <SidebarMenu>
                 {superAdminNav.map((item) => (
@@ -114,8 +114,8 @@ export function AppSidebar() {
                     >
                       <NavLink
                         to={item.url}
-                        className="transition-colors"
-                        activeClassName="bg-primary/10 text-primary font-medium"
+                        className="transition-all hover:text-destructive font-medium"
+                        activeClassName="bg-destructive/10 text-destructive font-semibold rounded-md"
                       >
                         <item.icon className="h-4 w-4 shrink-0" />
                         {!collapsed && <span>{item.title}</span>}
@@ -134,14 +134,14 @@ export function AppSidebar() {
         <div className="flex items-center gap-3">
           <Avatar className="h-8 w-8 shrink-0">
             <AvatarImage src={profile?.avatar_url || ''} />
-            <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+            <AvatarFallback className="bg-primary/20 text-primary font-medium">
               {initials}
             </AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="flex flex-1 flex-col overflow-hidden">
-              <span className="truncate text-sm font-medium">{profile?.full_name}</span>
-              <Badge variant="secondary" className="w-fit text-[10px] capitalize">
+              <span className="truncate text-sm font-medium text-primary">{profile?.full_name}</span>
+              <Badge variant="outline" className="w-fit border-border text-[10px] capitalize text-muted-foreground mt-1">
                 {profile?.platform_role?.replace('_', ' ')}
               </Badge>
             </div>

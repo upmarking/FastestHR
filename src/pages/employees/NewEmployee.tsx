@@ -1,0 +1,270 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuthStore } from '@/store/auth-store';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { ArrowLeft, Save, UserPlus, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'contract', 'intern'] as const;
+const STATUSES = ['active', 'probation', 'on_leave', 'resigned', 'terminated'] as const;
+const GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'] as const;
+
+export default function NewEmployee() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { profile } = useAuthStore();
+
+  const [form, setForm] = useState({
+    first_name: '',
+    last_name: '',
+    work_email: '',
+    personal_email: '',
+    phone: '',
+    employee_code: '',
+    department_id: '',
+    designation_id: '',
+    date_of_joining: '',
+    date_of_birth: '',
+    gender: 'male' as typeof GENDERS[number],
+    employment_type: 'full_time' as typeof EMPLOYMENT_TYPES[number],
+    status: 'active' as typeof STATUSES[number],
+    manager_id: '',
+  });
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ['departments'],
+    queryFn: async () => {
+      const { data } = await supabase.from('departments').select('id, name').order('name');
+      return data || [];
+    },
+  });
+
+  const { data: designations = [] } = useQuery({
+    queryKey: ['designations'],
+    queryFn: async () => {
+      const { data } = await supabase.from('designations').select('id, title').order('title');
+      return data || [];
+    },
+  });
+
+  const { data: managers = [] } = useQuery({
+    queryKey: ['managers'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name, employee_code')
+        .eq('status', 'active')
+        .is('deleted_at', null)
+        .order('first_name');
+      return data || [];
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (payload: typeof form) => {
+      const { data, error } = await supabase
+        .from('employees')
+        .insert([
+          {
+            ...payload,
+            company_id: profile?.company_id,
+            department_id: payload.department_id || null,
+            designation_id: payload.designation_id || null,
+            manager_id: payload.manager_id || null,
+            date_of_birth: payload.date_of_birth || null,
+            date_of_joining: payload.date_of_joining || null,
+            personal_email: payload.personal_email || null,
+            phone: payload.phone || null,
+            employee_code: payload.employee_code || null,
+          },
+        ])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-count'] });
+      toast.success('SYSTEM::EMPLOYEE_CREATED — ' + (data.first_name + ' ' + data.last_name).toUpperCase());
+      navigate('/employees/' + data.id);
+    },
+    onError: (err: any) => {
+      toast.error('ERROR::' + (err?.message || 'Failed to create employee'));
+    },
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.first_name.trim() || !form.last_name.trim() || !form.work_email.trim()) {
+      toast.error('ERROR::MISSING_REQUIRED_FIELDS');
+      return;
+    }
+    createMutation.mutate(form);
+  };
+
+  const Field = ({ label, name, type = 'text', required = false, placeholder = '' }: {
+    label: string; name: string; type?: string; required?: boolean; placeholder?: string;
+  }) => (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        {label}{required && <span className="text-destructive ml-0.5">*</span>}
+      </label>
+      <Input
+        type={type}
+        name={name}
+        value={(form as any)[name]}
+        onChange={handleChange}
+        required={required}
+        placeholder={placeholder}
+        className="bg-background/50 border-border/50 text-sm h-10 focus:border-primary"
+      />
+    </div>
+  );
+
+  const SelectField = ({ label, name, options, required = false }: {
+    label: string; name: string; options: { value: string; label: string }[]; required?: boolean;
+  }) => (
+    <div className="space-y-1.5">
+      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        {label}{required && <span className="text-destructive ml-0.5">*</span>}
+      </label>
+      <select
+        name={name}
+        value={(form as any)[name]}
+        onChange={handleChange}
+        className="flex h-10 w-full rounded-md border border-border/50 bg-background/50 px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+      >
+        <option value="">— Select —</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center gap-4">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => navigate('/employees')}
+          className="border border-border/50 hover:border-primary hover:bg-primary/10"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+            <UserPlus className="h-6 w-6" /> Add New Employee
+          </h1>
+          <p className="text-muted-foreground mt-1 text-sm">EMPLOYEE_ONBOARDING::FORM_v1</p>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Personal Info */}
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b border-border/50 pb-4">
+            <CardTitle className="text-foreground font-semibold text-base flex items-center gap-2">
+              <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5">01</span>
+              PERSONAL_INFORMATION
+            </CardTitle>
+            <CardDescription className="text-xs font-medium">Basic personal details of the employee</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6 grid sm:grid-cols-2 gap-4">
+            <Field label="First Name" name="first_name" required placeholder="John" />
+            <Field label="Last Name" name="last_name" required placeholder="Doe" />
+            <Field label="Date of Birth" name="date_of_birth" type="date" />
+            <SelectField
+              label="Gender"
+              name="gender"
+              options={GENDERS.map((g) => ({ value: g, label: g.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) }))}
+            />
+            <Field label="Personal Email" name="personal_email" type="email" placeholder="john@personal.com" />
+            <Field label="Phone" name="phone" placeholder="+1 (555) 000-0000" />
+          </CardContent>
+        </Card>
+
+        {/* Employment Info */}
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b border-border/50 pb-4">
+            <CardTitle className="text-foreground font-semibold text-base flex items-center gap-2">
+              <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5">02</span>
+              EMPLOYMENT_DETAILS
+            </CardTitle>
+            <CardDescription className="text-xs font-medium">Work-related information</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6 grid sm:grid-cols-2 gap-4">
+            <Field label="Work Email" name="work_email" type="email" required placeholder="john@company.com" />
+            <Field label="Employee Code" name="employee_code" placeholder="EMP-001" />
+            <Field label="Date of Joining" name="date_of_joining" type="date" />
+            <SelectField
+              label="Employment Type"
+              name="employment_type"
+              options={EMPLOYMENT_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) }))}
+            />
+            <SelectField
+              label="Department"
+              name="department_id"
+              options={departments.map((d: any) => ({ value: d.id, label: d.name }))}
+            />
+            <SelectField
+              label="Designation / Role"
+              name="designation_id"
+              options={designations.map((d: any) => ({ value: d.id, label: d.title }))}
+            />
+            <SelectField
+              label="Reporting Manager"
+              name="manager_id"
+              options={managers.map((m: any) => ({
+                value: m.id,
+                label: `${m.first_name} ${m.last_name}${m.employee_code ? ` (${m.employee_code})` : ''}`,
+              }))}
+            />
+            <SelectField
+              label="Status"
+              name="status"
+              options={STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) }))}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Actions */}
+        <div className="flex items-center justify-between">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => navigate('/employees')}
+            className="border-border/50 hover:border-primary/50 transition-all"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" /> CANCEL
+          </Button>
+          <Button
+            type="submit"
+            disabled={createMutation.isPending}
+            className="gap-2 min-w-[160px]"
+          >
+            {createMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            {createMutation.isPending ? 'SAVING...' : 'SAVE_EMPLOYEE'}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}

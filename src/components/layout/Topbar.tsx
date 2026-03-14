@@ -33,15 +33,15 @@ export function Topbar() {
     .slice(0, 2) || 'U';
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b bg-card px-4">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border bg-background/60 backdrop-blur-md px-4">
       <SidebarTrigger className="-ml-1" />
 
       {/* Breadcrumbs */}
       <nav className="hidden items-center gap-1.5 text-sm md:flex">
         {breadcrumbs.map((crumb, i) => (
           <span key={crumb.path} className="flex items-center gap-1.5">
-            {i > 0 && <span className="text-muted-foreground">/</span>}
-            <span className={i === breadcrumbs.length - 1 ? 'font-medium' : 'text-muted-foreground'}>
+            {i > 0 && <span className="text-primary/50">/</span>}
+            <span className={i === breadcrumbs.length - 1 ? 'font-medium text-primary' : 'text-muted-foreground transition-colors hover:text-primary'}>
               {crumb.label}
             </span>
           </span>
@@ -53,12 +53,12 @@ export function Topbar() {
       {/* Search */}
       <Button
         variant="outline"
-        className="hidden h-9 w-64 justify-start gap-2 text-muted-foreground md:flex"
+        className="hidden h-9 w-64 justify-start gap-2 border-border bg-background/50 text-muted-foreground hover:border-primary/50 hover:text-foreground md:flex transition-all backdrop-blur-sm"
         onClick={() => {/* TODO: command palette */}}
       >
         <Search className="h-4 w-4" />
         <span className="text-sm">Search...</span>
-        <kbd className="ml-auto rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium">⌘K</kbd>
+        <kbd className="ml-auto rounded-md border border-border bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">⌘K</kbd>
       </Button>
 
       {/* Theme toggle */}
@@ -80,7 +80,7 @@ export function Topbar() {
           <Button variant="ghost" className="h-9 gap-2 px-2">
             <Avatar className="h-7 w-7">
               <AvatarImage src={profile?.avatar_url || ''} />
-              <AvatarFallback className="bg-primary/10 text-primary text-xs">{initials}</AvatarFallback>
+              <AvatarFallback className="bg-primary/20 text-primary text-xs font-medium">{initials}</AvatarFallback>
             </Avatar>
             <span className="hidden text-sm font-medium md:inline">{profile?.full_name}</span>
           </Button>

@@ -15,15 +15,16 @@ function MetricCard({ title, value, icon: Icon, trend, color }: {
   title: string; value: string | number; icon: any; trend?: string; color: string;
 }) {
   return (
-    <Card>
-      <CardContent className="p-6">
+    <Card className="relative overflow-hidden group">
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"></div>
+      <CardContent className="p-6 relative z-10">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-muted-foreground">{title}</p>
             <p className="mt-1 text-3xl font-bold">{value}</p>
             {trend && <p className="mt-1 text-xs text-success">{trend}</p>}
           </div>
-          <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${color}`}>
+          <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-background border border-border/50 ${color}`}>
             <Icon className="h-6 w-6" />
           </div>
         </div>
@@ -85,8 +86,8 @@ function CompanyAdminDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">Welcome back, {profile?.full_name}</p>
+        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        <p className="text-muted-foreground mt-1">Welcome back, {profile?.full_name}</p>
       </div>
 
       {/* Metric Cards */}
@@ -99,9 +100,10 @@ function CompanyAdminDashboard() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Pending Leave Requests */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-lg">Pending Leave Requests</CardTitle>
+        <Card className="lg:col-span-2 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl pointer-events-none"></div>
+          <CardHeader className="flex flex-row items-center justify-between border-b border-border/50 pb-4 relative z-10">
+            <CardTitle>Pending Leave Requests</CardTitle>
             <Button variant="ghost" size="sm" onClick={() => navigate('/leave')}>
               View All <ArrowRight className="ml-1 h-4 w-4" />
             </Button>
@@ -119,16 +121,16 @@ function CompanyAdminDashboard() {
             ) : (
               <div className="space-y-3">
                 {leaveRequests.map((req: any) => (
-                  <div key={req.id} className="flex items-center justify-between rounded-lg border p-3">
+                  <div key={req.id} className="flex items-center justify-between rounded-lg border border-border/50 bg-background/50 p-3 hover:border-border/50 hover:bg-muted/30 transition-all cursor-pointer">
                     <div>
-                      <p className="text-sm font-medium">
+                      <p className="text-sm font-medium text-foreground">
                         {req.employees?.first_name} {req.employees?.last_name}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {req.start_date} — {req.end_date} · {req.total_days} days
                       </p>
                     </div>
-                    <Badge variant="secondary">Pending</Badge>
+                    <Badge variant="outline" className="border-warning text-warning">Pending</Badge>
                   </div>
                 ))}
               </div>
@@ -138,10 +140,10 @@ function CompanyAdminDashboard() {
 
         {/* Quick Actions */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Quick Actions</CardTitle>
+          <CardHeader className="border-b border-border/50 pb-4">
+            <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="space-y-3 pt-4">
             <Button variant="outline" className="w-full justify-start gap-2" onClick={() => navigate('/employees/new')}>
               <UserPlus className="h-4 w-4" /> Add Employee
             </Button>

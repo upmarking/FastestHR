@@ -46,8 +46,8 @@ export default function Employees() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Employees</h1>
-          <p className="text-muted-foreground">{employees.length} total employees</p>
+          <h1 className="text-3xl font-bold tracking-tight">Employees</h1>
+          <p className="text-muted-foreground mt-1">{employees.length} total employees</p>
         </div>
         <Button onClick={() => navigate('/employees/new')}>
           <Plus className="mr-2 h-4 w-4" /> Add Employee
@@ -59,12 +59,12 @@ export default function Employees() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search employees..."
-            className="pl-9"
+            className="pl-9 bg-background/50 backdrop-blur-sm"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex rounded-lg border">
+        <div className="flex rounded-md border border-border/50 bg-background/50 p-1 backdrop-blur-sm">
           <Button variant={view === 'grid' ? 'secondary' : 'ghost'} size="icon" onClick={() => setView('grid')}>
             <Grid3X3 className="h-4 w-4" />
           </Button>
@@ -96,19 +96,19 @@ export default function Employees() {
       ) : view === 'grid' ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {employees.map((emp: any) => (
-            <Card key={emp.id} className="cursor-pointer transition-shadow hover:shadow-md" onClick={() => navigate(`/employees/${emp.id}`)}>
+            <Card key={emp.id} className="cursor-pointer transition-all hover:border-primary/50 hover:shadow-md hover:bg-card/80" onClick={() => navigate(`/employees/${emp.id}`)}>
               <CardContent className="p-6">
                 <div className="flex items-start gap-4">
                   <Avatar className="h-12 w-12">
                     <AvatarImage src={emp.avatar_url || ''} />
-                    <AvatarFallback className="bg-primary/10 text-primary">
+                    <AvatarFallback className="bg-primary/20 text-primary font-medium">
                       {emp.first_name[0]}{emp.last_name[0]}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 overflow-hidden">
-                    <p className="truncate font-semibold">{emp.first_name} {emp.last_name}</p>
-                    <p className="truncate text-sm text-muted-foreground">{(emp as any).designations?.title || 'No designation'}</p>
-                    <p className="truncate text-xs text-muted-foreground">{(emp as any).departments?.name || 'No department'}</p>
+                    <p className="truncate font-semibold text-foreground">{emp.first_name} {emp.last_name}</p>
+                    <p className="truncate text-sm text-muted-foreground mt-1">{(emp as any).designations?.title || 'No designation'}</p>
+                    <p className="truncate text-xs text-muted-foreground/70 mt-0.5">{(emp as any).departments?.name || 'No department'}</p>
                   </div>
                 </div>
                 <div className="mt-4 flex items-center justify-between">
@@ -122,19 +122,19 @@ export default function Employees() {
           ))}
         </div>
       ) : (
-        <Card>
-          <div className="divide-y">
+        <Card className="overflow-hidden">
+          <div className="divide-y divide-border/50">
             {employees.map((emp: any) => (
-              <div key={emp.id} className="flex cursor-pointer items-center gap-4 p-4 transition-colors hover:bg-muted/50" onClick={() => navigate(`/employees/${emp.id}`)}>
+              <div key={emp.id} className="flex cursor-pointer items-center gap-4 p-4 transition-all hover:bg-muted/50" onClick={() => navigate(`/employees/${emp.id}`)}>
                 <Avatar className="h-10 w-10">
                   <AvatarImage src={emp.avatar_url || ''} />
-                  <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                  <AvatarFallback className="bg-primary/20 text-primary font-medium text-sm">
                     {emp.first_name[0]}{emp.last_name[0]}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
-                  <p className="font-medium">{emp.first_name} {emp.last_name}</p>
-                  <p className="text-sm text-muted-foreground">{(emp as any).designations?.title || '—'} · {(emp as any).departments?.name || '—'}</p>
+                  <p className="font-medium text-foreground">{emp.first_name} {emp.last_name}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{(emp as any).designations?.title || '—'} · {(emp as any).departments?.name || '—'}</p>
                 </div>
                 <Badge className={statusColor[emp.status || 'active'] || ''} variant="secondary">
                   {emp.status || 'active'}

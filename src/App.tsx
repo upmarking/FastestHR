@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Route, Routes, Navigate } from 'react-router-dom';
 import { Toaster as Sonner } from '@/components/ui/sonner';
@@ -16,6 +16,27 @@ import ForgotPassword from '@/pages/auth/ForgotPassword';
 import ResetPassword from '@/pages/auth/ResetPassword';
 import Dashboard from '@/pages/Dashboard';
 import Employees from '@/pages/Employees';
+import Attendance from '@/pages/Attendance';
+import Leave from '@/pages/Leave';
+import Payroll from '@/pages/Payroll';
+import Performance from '@/pages/Performance';
+import Recruitment from '@/pages/Recruitment';
+import Learning from '@/pages/Learning';
+import HelpDesk from '@/pages/HelpDesk';
+import Announcements from '@/pages/Announcements';
+import Reports from '@/pages/Reports';
+import Settings from '@/pages/Settings';
+
+import Companies from '@/pages/admin/Companies';
+import Subscriptions from '@/pages/admin/Subscriptions';
+import SystemSettings from '@/pages/admin/SystemSettings';
+
+// Sub-pages (lazy loaded for performance)
+const NewEmployee = lazy(() => import('@/pages/employees/NewEmployee'));
+const EmployeeDetail = lazy(() => import('@/pages/employees/EmployeeDetail'));
+const ApplyLeave = lazy(() => import('@/pages/leaves/ApplyLeave'));
+const NewJob = lazy(() => import('@/pages/recruitment/NewJob'));
+
 import PlaceholderPage from '@/pages/PlaceholderPage';
 import NotFound from '@/pages/NotFound';
 
@@ -33,6 +54,23 @@ function AppRoutes() {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
+  // Loading fallback for lazy routes
+  const LazyFallback = () => (
+    <div className="flex h-64 items-center justify-center">
+      <div className="font-mono text-muted-foreground text-sm animate-pulse">LOADING MODULE...</div>
+    </div>
+  );
+
+  const withLayout = (component: React.ReactNode, role?: string) => (
+    <ProtectedRoute requiredRole={role as any}>
+      <DashboardLayout>
+        <Suspense fallback={<LazyFallback />}>
+          {component}
+        </Suspense>
+      </DashboardLayout>
+    </ProtectedRoute>
+  );
+
   return (
     <Routes>
       {/* Public routes */}
@@ -42,25 +80,29 @@ function AppRoutes() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
 
-      {/* Protected routes - wrapped in DashboardLayout */}
-      <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout><Dashboard /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/employees" element={<ProtectedRoute><DashboardLayout><Employees /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/attendance" element={<ProtectedRoute><DashboardLayout><PlaceholderPage title="Attendance" /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/leave" element={<ProtectedRoute><DashboardLayout><PlaceholderPage title="Leave Management" /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/payroll" element={<ProtectedRoute><DashboardLayout><PlaceholderPage title="Payroll" /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/performance" element={<ProtectedRoute><DashboardLayout><PlaceholderPage title="Performance" /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/recruitment" element={<ProtectedRoute><DashboardLayout><PlaceholderPage title="Recruitment" /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/learning" element={<ProtectedRoute><DashboardLayout><PlaceholderPage title="Learning & Development" /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/helpdesk" element={<ProtectedRoute><DashboardLayout><PlaceholderPage title="Help Desk" /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/announcements" element={<ProtectedRoute><DashboardLayout><PlaceholderPage title="Announcements" /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/reports" element={<ProtectedRoute><DashboardLayout><PlaceholderPage title="Reports & Analytics" /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/settings/*" element={<ProtectedRoute><DashboardLayout><PlaceholderPage title="Settings" /></DashboardLayout></ProtectedRoute>} />
+      {/* Core HR modules */}
+      <Route path="/dashboard" element={withLayout(<Dashboard />)} />
+      <Route path="/employees" element={withLayout(<Employees />)} />
+      <Route path="/employees/new" element={withLayout(<NewEmployee />)} />
+      <Route path="/employees/:id" element={withLayout(<EmployeeDetail />)} />
+      <Route path="/attendance" element={withLayout(<Attendance />)} />
+      <Route path="/leave" element={withLayout(<Leave />)} />
+      <Route path="/leave/apply" element={withLayout(<ApplyLeave />)} />
+      <Route path="/payroll" element={withLayout(<Payroll />)} />
+      <Route path="/performance" element={withLayout(<Performance />)} />
+      <Route path="/recruitment" element={withLayout(<Recruitment />)} />
+      <Route path="/recruitment/new" element={withLayout(<NewJob />)} />
+      <Route path="/learning" element={withLayout(<Learning />)} />
+      <Route path="/helpdesk" element={withLayout(<HelpDesk />)} />
+      <Route path="/announcements" element={withLayout(<Announcements />)} />
+      <Route path="/reports" element={withLayout(<Reports />)} />
+      <Route path="/settings/*" element={withLayout(<Settings />)} />
 
       {/* Super Admin routes */}
-      <Route path="/admin" element={<ProtectedRoute requiredRole="super_admin"><DashboardLayout><Dashboard /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/admin/companies" element={<ProtectedRoute requiredRole="super_admin"><DashboardLayout><PlaceholderPage title="Companies" /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/admin/subscriptions" element={<ProtectedRoute requiredRole="super_admin"><DashboardLayout><PlaceholderPage title="Subscriptions" /></DashboardLayout></ProtectedRoute>} />
-      <Route path="/admin/system" element={<ProtectedRoute requiredRole="super_admin"><DashboardLayout><PlaceholderPage title="System Settings" /></DashboardLayout></ProtectedRoute>} />
+      <Route path="/admin" element={withLayout(<Dashboard />, 'super_admin')} />
+      <Route path="/admin/companies" element={withLayout(<Companies />, 'super_admin')} />
+      <Route path="/admin/subscriptions" element={withLayout(<Subscriptions />, 'super_admin')} />
+      <Route path="/admin/system" element={withLayout(<SystemSettings />, 'super_admin')} />
 
       <Route path="*" element={<NotFound />} />
     </Routes>

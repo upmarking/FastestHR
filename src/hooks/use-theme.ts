@@ -10,7 +10,7 @@ interface ThemeState {
 export const useTheme = create<ThemeState>()(
   persist(
     (set, get) => ({
-      theme: 'light',
+      theme: 'dark',
       toggle: () => {
         const next = get().theme === 'light' ? 'dark' : 'light';
         document.documentElement.classList.toggle('dark', next === 'dark');
@@ -21,6 +21,6 @@ export const useTheme = create<ThemeState>()(
         set({ theme });
       },
     }),
-    { name: 'fastesthr-theme' }
+    { name: 'fastesthr-theme-v2' }
   )
 );
