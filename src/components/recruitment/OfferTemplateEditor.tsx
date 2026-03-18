@@ -57,14 +57,13 @@ export function OfferTemplateList() {
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['offer-templates', profile?.company_id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('offer_templates')
+      const { data, error } = await (supabase.from('offer_templates' as any) as any)
         .select('*')
         .eq('company_id', profile!.company_id!)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      return data as OfferTemplate[];
+      return (data || []) as OfferTemplate[];
     },
     enabled: !!profile?.company_id,
   });
