@@ -24,7 +24,8 @@ Deno.serve(async (req) => {
     );
     if (authError || !user) throw new Error('Unauthorized');
 
-    const { action, amount, company_id, razorpay_order_id, razorpay_payment_id, razorpay_signature } = await req.json();
+    const body = await req.json();
+    const { action, amount, company_id, razorpay_order_id, razorpay_payment_id, razorpay_signature, months } = body;
 
     const RAZORPAY_KEY_ID = Deno.env.get('RAZORPAY_KEY_ID');
     const RAZORPAY_KEY_SECRET = Deno.env.get('RAZORPAY_KEY_SECRET');
@@ -34,7 +35,6 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'create_order') {
-      // Create Razorpay order
       const amountInPaise = Math.round(amount * 100);
       
       const orderRes = await fetch('https://api.razorpay.com/v1/orders', {
@@ -58,7 +58,6 @@ Deno.serve(async (req) => {
 
       const order = await orderRes.json();
 
-      // Save pending transaction
       await supabaseClient.from('wallet_transactions').insert({
         company_id,
         amount,
@@ -79,7 +78,6 @@ Deno.serve(async (req) => {
       });
 
     } else if (action === 'verify_payment') {
-      // Verify signature using Web Crypto API
       const encoder = new TextEncoder();
       const key = await crypto.subtle.importKey(
         'raw',
@@ -95,7 +93,6 @@ Deno.serve(async (req) => {
         .join('');
 
       if (expectedSignature !== razorpay_signature) {
-        // Mark transaction as failed
         await supabaseClient
           .from('wallet_transactions')
           .update({ status: 'failed' })
@@ -104,7 +101,6 @@ Deno.serve(async (req) => {
         throw new Error('Payment signature verification failed');
       }
 
-      // Update transaction to completed
       const { data: txn } = await supabaseClient
         .from('wallet_transactions')
         .update({ 
@@ -117,7 +113,6 @@ Deno.serve(async (req) => {
 
       if (!txn) throw new Error('Transaction not found');
 
-      // Credit wallet balance
       const { data: company } = await supabaseClient
         .from('companies')
         .select('wallet_balance')
@@ -139,35 +134,47 @@ Deno.serve(async (req) => {
       });
 
     } else if (action === 'purchase_licenses') {
-      // Debit wallet for license purchase
+      // Prorated license purchase: charge only for remaining days until expiry
       const { data: company } = await supabaseClient
         .from('companies')
-        .select('wallet_balance, license_limit, price_per_license')
+        .select('wallet_balance, license_limit, price_per_license, plan_expires_at, plan')
         .eq('id', company_id)
         .single();
 
       if (!company) throw new Error('Company not found');
 
-      const totalCost = amount * (company.price_per_license || 500);
+      const seatsRequested = amount;
+      const pricePerSeat = company.price_per_license || 500;
+      const expiresAt = company.plan_expires_at ? new Date(company.plan_expires_at) : null;
+      const now = new Date();
+
+      if (!expiresAt || expiresAt <= now) {
+        throw new Error('Your subscription has expired. Please extend your subscription first.');
+      }
+
+      // Calculate remaining days and prorate
+      const totalDaysInMonth = 30;
+      const remainingMs = expiresAt.getTime() - now.getTime();
+      const remainingDays = Math.max(1, Math.ceil(remainingMs / (1000 * 60 * 60 * 24)));
+      const proratedCostPerSeat = Math.round((pricePerSeat / totalDaysInMonth) * remainingDays);
+      const totalCost = seatsRequested * proratedCostPerSeat;
       
       if ((company.wallet_balance || 0) < totalCost) {
-        throw new Error(`Insufficient wallet balance. Need ₹${totalCost.toLocaleString()} but have ₹${(company.wallet_balance || 0).toLocaleString()}`);
+        throw new Error(`Insufficient wallet balance. Need ₹${totalCost.toLocaleString()} (prorated for ${remainingDays} days) but have ₹${(company.wallet_balance || 0).toLocaleString()}`);
       }
 
       const newBalance = (company.wallet_balance || 0) - totalCost;
-      const newLicenseLimit = (company.license_limit || 0) + amount;
+      const newLicenseLimit = (company.license_limit || 0) + seatsRequested;
 
-      // Debit wallet
       await supabaseClient.from('wallet_transactions').insert({
         company_id,
         amount: totalCost,
         type: 'debit',
-        description: `Purchased ${amount} additional license(s) at ₹${(company.price_per_license || 500).toLocaleString()}/seat`,
+        description: `Purchased ${seatsRequested} license(s) — ₹${proratedCostPerSeat}/seat prorated for ${remainingDays} days`,
         status: 'completed',
         created_by: user.id,
       });
 
-      // Update company
       await supabaseClient
         .from('companies')
         .update({ 
@@ -180,6 +187,63 @@ Deno.serve(async (req) => {
         success: true, 
         new_balance: newBalance,
         new_license_limit: newLicenseLimit,
+        prorated_cost: totalCost,
+        remaining_days: remainingDays,
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+
+    } else if (action === 'extend_subscription') {
+      // Extend subscription by N months, charge for (current_license_limit * price * months)
+      const extensionMonths = months || 1;
+
+      const { data: company } = await supabaseClient
+        .from('companies')
+        .select('wallet_balance, license_limit, price_per_license, plan_expires_at, plan')
+        .eq('id', company_id)
+        .single();
+
+      if (!company) throw new Error('Company not found');
+
+      const pricePerSeat = company.price_per_license || 500;
+      const currentSeats = company.license_limit || 1;
+      const totalCost = currentSeats * pricePerSeat * extensionMonths;
+
+      if ((company.wallet_balance || 0) < totalCost) {
+        throw new Error(`Insufficient wallet balance. Need ₹${totalCost.toLocaleString()} for ${extensionMonths} month(s) × ${currentSeats} seats but have ₹${(company.wallet_balance || 0).toLocaleString()}`);
+      }
+
+      const now = new Date();
+      const currentExpiry = company.plan_expires_at ? new Date(company.plan_expires_at) : null;
+      // If already expired or no expiry, start from now; otherwise extend from current expiry
+      const baseDate = (currentExpiry && currentExpiry > now) ? currentExpiry : now;
+      const newExpiry = new Date(baseDate);
+      newExpiry.setMonth(newExpiry.getMonth() + extensionMonths);
+
+      const newBalance = (company.wallet_balance || 0) - totalCost;
+
+      await supabaseClient.from('wallet_transactions').insert({
+        company_id,
+        amount: totalCost,
+        type: 'debit',
+        description: `Subscription extended by ${extensionMonths} month(s) — ${currentSeats} seats × ₹${pricePerSeat}/seat`,
+        status: 'completed',
+        created_by: user.id,
+      });
+
+      await supabaseClient
+        .from('companies')
+        .update({ 
+          wallet_balance: newBalance,
+          plan_expires_at: newExpiry.toISOString(),
+          plan: 'active',
+        })
+        .eq('id', company_id);
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        new_balance: newBalance,
+        new_expiry: newExpiry.toISOString(),
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
