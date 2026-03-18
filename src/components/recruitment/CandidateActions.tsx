@@ -231,8 +231,7 @@ export function CandidateActions({ candidateId, jobId, currentStage, pipelineSta
       const { data: candData } = await supabase.from('candidates').select('full_name').eq('id', candidateId).single();
       setCandidate(candData);
 
-      const { data: offerData } = await supabase
-        .from('candidate_offers')
+      const { data: offerData } = await (supabase.from('candidate_offers' as any) as any)
         .select('joining_date, payout')
         .eq('candidate_id', candidateId)
         .order('created_at', { ascending: false })
@@ -241,8 +240,8 @@ export function CandidateActions({ candidateId, jobId, currentStage, pipelineSta
 
       if (offerData) {
         setExistingOffer({
-          joining_date: offerData.joining_date || '',
-          payout: offerData.payout || 0,
+          joining_date: (offerData as any).joining_date || '',
+          payout: (offerData as any).payout || 0,
         });
       }
       

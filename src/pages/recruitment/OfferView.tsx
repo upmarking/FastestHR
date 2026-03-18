@@ -16,8 +16,7 @@ export default function OfferView() {
       if (!token) return;
       
       try {
-        const { data, error: fetchError } = await supabase
-          .from('candidate_offers')
+        const { data, error: fetchError } = await (supabase.from('candidate_offers' as any) as any)
           .select('*, companies(name, logo_url), candidates(full_name), jobs(title)')
           .eq('token', token)
           .single();
