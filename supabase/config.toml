@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.send-offer-letter]
 verify_jwt = false
+
+[functions.razorpay-order]
+verify_jwt = false
