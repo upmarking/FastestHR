@@ -92,7 +92,7 @@ export function CandidateActions({ candidateId, jobId, currentStage, pipelineSta
         // 3. Generate and Upload PDF
         const pdfPath = await generateAndUploadOfferPDF({
           htmlContent: rawHtml,
-          letterheadUrl: template.letterhead_url,
+          letterheadUrl: (template as any).letterhead_url,
           candidateName: candidateInfo!.full_name,
           jobTitle: jobInfo!.title,
           joiningDate: offerData.joiningDate,
