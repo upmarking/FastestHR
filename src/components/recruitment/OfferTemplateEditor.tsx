@@ -57,22 +57,20 @@ export function OfferTemplateList() {
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['offer-templates', profile?.company_id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('offer_templates')
+      const { data, error } = await (supabase.from('offer_templates' as any) as any)
         .select('*')
         .eq('company_id', profile!.company_id!)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      return data as OfferTemplate[];
+      return (data || []) as OfferTemplate[];
     },
     enabled: !!profile?.company_id,
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('offer_templates')
+      const { error } = await (supabase.from('offer_templates' as any) as any)
         .delete()
         .eq('id', id);
       if (error) throw error;
@@ -221,15 +219,13 @@ function OfferTemplateEditor({ isOpen, onClose, template }: { isOpen: boolean, o
       };
 
       if (template) {
-        const { error } = await supabase
-          .from('offer_templates')
+        const { error } = await (supabase.from('offer_templates' as any) as any)
           .update(payload)
           .eq('id', template.id);
         if (error) throw error;
         toast.success('Template updated');
       } else {
-        const { error } = await supabase
-          .from('offer_templates')
+        const { error } = await (supabase.from('offer_templates' as any) as any)
           .insert(payload);
         if (error) throw error;
         toast.success('Template created');

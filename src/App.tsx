@@ -26,6 +26,7 @@ import HelpDesk from '@/pages/HelpDesk';
 import Announcements from '@/pages/Announcements';
 import Reports from '@/pages/Reports';
 import Settings from '@/pages/Settings';
+import Billing from '@/pages/settings/Billing';
 import OfferView from '@/pages/recruitment/OfferView';
 
 
@@ -102,6 +103,7 @@ function AppRoutes() {
       <Route path="/announcements" element={withLayout(<Announcements />)} />
       <Route path="/reports" element={withLayout(<Reports />)} />
       <Route path="/settings/*" element={withLayout(<Settings />)} />
+      <Route path="/billing" element={withLayout(<Billing />)} />
 
       {/* Super Admin routes */}
       <Route path="/admin" element={withLayout(<Dashboard />, 'super_admin')} />

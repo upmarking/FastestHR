@@ -73,10 +73,10 @@ export function CandidateActions({ candidateId, jobId, currentStage, pipelineSta
         toast.info('Automation: Generating offer letter PDF...');
         
         // 1. Fetch required data for PDF (including email_subject and email_body from template)
-        const { data: template } = await supabase.from('offer_templates').select('*').eq('id', templateId).single();
+        const { data: template } = await (supabase.from('offer_templates' as any) as any).select('*').eq('id', templateId).single();
         const { data: candidateInfo } = await supabase.from('candidates').select('full_name, email').eq('id', candidateId).single();
         const { data: jobInfo } = await supabase.from('jobs').select('title').eq('id', jobId).single();
-        const { data: companyInfo } = await supabase.from('companies').select('offer_sequence_prefix').eq('id', (job as any).company_id).single();
+        const { data: companyInfo } = await supabase.from('companies').select('offer_sequence_prefix').eq('id', (job as any).company_id).single() as any;
         
         if (!template) {
           toast.error('Offer template not found. Please check your template configuration.');
@@ -84,15 +84,15 @@ export function CandidateActions({ candidateId, jobId, currentStage, pipelineSta
         }
 
         // 2. Fetch Offer Sequence
-        const { data: offerSequence } = await supabase.rpc('increment_offer_sequence', { p_company_id: (job as any).company_id });
-        const offerNumberStr = `${companyInfo?.offer_sequence_prefix || 'OFFER-'}${offerSequence?.toString().padStart(4, '0')}`;
+        const { data: offerSequence } = await supabase.rpc('increment_offer_sequence' as any, { p_company_id: (job as any).company_id });
+        const offerNumberStr = `${(companyInfo as any)?.offer_sequence_prefix || 'OFFER-'}${(offerSequence as any)?.toString().padStart(4, '0')}`;
         
-        const rawHtml = template.html_content;
+        const rawHtml = (template as any).html_content;
         
         // 3. Generate and Upload PDF
         const pdfPath = await generateAndUploadOfferPDF({
           htmlContent: rawHtml,
-          letterheadUrl: template.letterhead_url,
+          letterheadUrl: (template as any).letterhead_url,
           candidateName: candidateInfo!.full_name,
           jobTitle: jobInfo!.title,
           joiningDate: offerData.joiningDate,
@@ -231,8 +231,7 @@ export function CandidateActions({ candidateId, jobId, currentStage, pipelineSta
       const { data: candData } = await supabase.from('candidates').select('full_name').eq('id', candidateId).single();
       setCandidate(candData);
 
-      const { data: offerData } = await supabase
-        .from('candidate_offers')
+      const { data: offerData } = await (supabase.from('candidate_offers' as any) as any)
         .select('joining_date, payout')
         .eq('candidate_id', candidateId)
         .order('created_at', { ascending: false })
@@ -241,8 +240,8 @@ export function CandidateActions({ candidateId, jobId, currentStage, pipelineSta
 
       if (offerData) {
         setExistingOffer({
-          joining_date: offerData.joining_date || '',
-          payout: offerData.payout || 0,
+          joining_date: (offerData as any).joining_date || '',
+          payout: (offerData as any).payout || 0,
         });
       }
       

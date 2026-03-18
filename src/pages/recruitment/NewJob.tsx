@@ -187,11 +187,10 @@ const AutomationModal = ({
 
   useEffect(() => {
     if (isOpen && profile?.company_id && isOfferStage) {
-      supabase
-        .from('offer_templates')
+      (supabase.from('offer_templates' as any) as any)
         .select('id, name')
         .eq('company_id', profile.company_id)
-        .then(({ data }) => {
+        .then(({ data }: any) => {
           if (data) setTemplates(data);
         });
     }
