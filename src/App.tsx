@@ -103,6 +103,7 @@ function AppRoutes() {
       <Route path="/announcements" element={withLayout(<Announcements />)} />
       <Route path="/reports" element={withLayout(<Reports />)} />
       <Route path="/settings/*" element={withLayout(<Settings />)} />
+      <Route path="/billing" element={withLayout(<Billing />)} />
 
       {/* Super Admin routes */}
       <Route path="/admin" element={withLayout(<Dashboard />, 'super_admin')} />
