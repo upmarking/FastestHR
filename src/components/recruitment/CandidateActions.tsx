@@ -73,7 +73,7 @@ export function CandidateActions({ candidateId, jobId, currentStage, pipelineSta
         toast.info('Automation: Generating offer letter PDF...');
         
         // 1. Fetch required data for PDF (including email_subject and email_body from template)
-        const { data: template } = await supabase.from('offer_templates').select('*').eq('id', templateId).single();
+        const { data: template } = await (supabase.from('offer_templates' as any) as any).select('*').eq('id', templateId).single();
         const { data: candidateInfo } = await supabase.from('candidates').select('full_name, email').eq('id', candidateId).single();
         const { data: jobInfo } = await supabase.from('jobs').select('title').eq('id', jobId).single();
         const { data: companyInfo } = await supabase.from('companies').select('offer_sequence_prefix').eq('id', (job as any).company_id).single();
