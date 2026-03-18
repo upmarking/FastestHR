@@ -236,6 +236,95 @@ export type Database = {
           },
         ]
       }
+      candidate_offers: {
+        Row: {
+          candidate_id: string
+          company_id: string
+          created_at: string
+          custom_variable_values: Json | null
+          expires_at: string | null
+          html_content: string
+          id: string
+          is_predefined_html: boolean | null
+          job_id: string
+          joining_date: string
+          offer_number: string
+          payout: number
+          pdf_url: string | null
+          status: string
+          template_id: string | null
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          candidate_id: string
+          company_id: string
+          created_at?: string
+          custom_variable_values?: Json | null
+          expires_at?: string | null
+          html_content: string
+          id?: string
+          is_predefined_html?: boolean | null
+          job_id: string
+          joining_date: string
+          offer_number: string
+          payout: number
+          pdf_url?: string | null
+          status?: string
+          template_id?: string | null
+          token?: string
+          updated_at?: string
+        }
+        Update: {
+          candidate_id?: string
+          company_id?: string
+          created_at?: string
+          custom_variable_values?: Json | null
+          expires_at?: string | null
+          html_content?: string
+          id?: string
+          is_predefined_html?: boolean | null
+          job_id?: string
+          joining_date?: string
+          offer_number?: string
+          payout?: number
+          pdf_url?: string | null
+          status?: string
+          template_id?: string | null
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "candidate_offers_candidate_id_fkey"
+            columns: ["candidate_id"]
+            isOneToOne: false
+            referencedRelation: "candidates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_offers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_offers_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "candidate_offers_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "offer_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       candidates: {
         Row: {
           company_id: string
@@ -249,8 +338,9 @@ export type Database = {
           phone: string | null
           rejection_reason: string | null
           resume_url: string | null
+          score: number | null
           source: string | null
-          stage: Database["public"]["Enums"]["candidate_stage"] | null
+          stage: string | null
           updated_at: string
         }
         Insert: {
@@ -265,8 +355,9 @@ export type Database = {
           phone?: string | null
           rejection_reason?: string | null
           resume_url?: string | null
+          score?: number | null
           source?: string | null
-          stage?: Database["public"]["Enums"]["candidate_stage"] | null
+          stage?: string | null
           updated_at?: string
         }
         Update: {
@@ -281,8 +372,9 @@ export type Database = {
           phone?: string | null
           rejection_reason?: string | null
           resume_url?: string | null
+          score?: number | null
           source?: string | null
-          stage?: Database["public"]["Enums"]["candidate_stage"] | null
+          stage?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -313,11 +405,19 @@ export type Database = {
           is_active: boolean | null
           logo_url: string | null
           name: string
+          offer_sequence_current: number | null
+          offer_sequence_prefix: string | null
           plan: string | null
           plan_expires_at: string | null
           setup_completed: boolean | null
           size: string | null
           slug: string
+          smtp_from_email: string | null
+          smtp_from_name: string | null
+          smtp_host: string | null
+          smtp_pass: string | null
+          smtp_port: number | null
+          smtp_user: string | null
           timezone: string | null
           updated_at: string
           work_days: string[] | null
@@ -332,11 +432,19 @@ export type Database = {
           is_active?: boolean | null
           logo_url?: string | null
           name: string
+          offer_sequence_current?: number | null
+          offer_sequence_prefix?: string | null
           plan?: string | null
           plan_expires_at?: string | null
           setup_completed?: boolean | null
           size?: string | null
           slug: string
+          smtp_from_email?: string | null
+          smtp_from_name?: string | null
+          smtp_host?: string | null
+          smtp_pass?: string | null
+          smtp_port?: number | null
+          smtp_user?: string | null
           timezone?: string | null
           updated_at?: string
           work_days?: string[] | null
@@ -351,11 +459,19 @@ export type Database = {
           is_active?: boolean | null
           logo_url?: string | null
           name?: string
+          offer_sequence_current?: number | null
+          offer_sequence_prefix?: string | null
           plan?: string | null
           plan_expires_at?: string | null
           setup_completed?: boolean | null
           size?: string | null
           slug?: string
+          smtp_from_email?: string | null
+          smtp_from_name?: string | null
+          smtp_host?: string | null
+          smtp_pass?: string | null
+          smtp_port?: number | null
+          smtp_user?: string | null
           timezone?: string | null
           updated_at?: string
           work_days?: string[] | null
@@ -995,9 +1111,11 @@ export type Database = {
           max_salary: number | null
           min_salary: number | null
           openings: number | null
+          pipeline_stages: Json | null
           posted_by: string | null
           published_at: string | null
           requirements: string | null
+          stage_automations: Json | null
           status: Database["public"]["Enums"]["job_status"] | null
           title: string
           updated_at: string
@@ -1016,9 +1134,11 @@ export type Database = {
           max_salary?: number | null
           min_salary?: number | null
           openings?: number | null
+          pipeline_stages?: Json | null
           posted_by?: string | null
           published_at?: string | null
           requirements?: string | null
+          stage_automations?: Json | null
           status?: Database["public"]["Enums"]["job_status"] | null
           title: string
           updated_at?: string
@@ -1037,9 +1157,11 @@ export type Database = {
           max_salary?: number | null
           min_salary?: number | null
           openings?: number | null
+          pipeline_stages?: Json | null
           posted_by?: string | null
           published_at?: string | null
           requirements?: string | null
+          stage_automations?: Json | null
           status?: Database["public"]["Enums"]["job_status"] | null
           title?: string
           updated_at?: string
@@ -1312,6 +1434,56 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      offer_templates: {
+        Row: {
+          company_id: string
+          created_at: string
+          custom_variables: Json | null
+          email_body: string | null
+          email_subject: string | null
+          html_content: string
+          id: string
+          is_predefined_html: boolean | null
+          letterhead_url: string | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          custom_variables?: Json | null
+          email_body?: string | null
+          email_subject?: string | null
+          html_content: string
+          id?: string
+          is_predefined_html?: boolean | null
+          letterhead_url?: string | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          custom_variables?: Json | null
+          email_body?: string | null
+          email_subject?: string | null
+          html_content?: string
+          id?: string
+          is_predefined_html?: boolean | null
+          letterhead_url?: string | null
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offer_templates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -2107,6 +2279,10 @@ export type Database = {
       get_user_platform_role: {
         Args: never
         Returns: Database["public"]["Enums"]["platform_role"]
+      }
+      increment_offer_sequence: {
+        Args: { p_company_id: string }
+        Returns: number
       }
       is_company_admin: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
