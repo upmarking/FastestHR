@@ -84,8 +84,8 @@ export function CandidateActions({ candidateId, jobId, currentStage, pipelineSta
         }
 
         // 2. Fetch Offer Sequence
-        const { data: offerSequence } = await supabase.rpc('increment_offer_sequence', { p_company_id: (job as any).company_id });
-        const offerNumberStr = `${companyInfo?.offer_sequence_prefix || 'OFFER-'}${offerSequence?.toString().padStart(4, '0')}`;
+        const { data: offerSequence } = await supabase.rpc('increment_offer_sequence' as any, { p_company_id: (job as any).company_id });
+        const offerNumberStr = `${(companyInfo as any)?.offer_sequence_prefix || 'OFFER-'}${(offerSequence as any)?.toString().padStart(4, '0')}`;
         
         const rawHtml = template.html_content;
         
