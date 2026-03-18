@@ -70,8 +70,7 @@ export function OfferTemplateList() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('offer_templates')
+      const { error } = await (supabase.from('offer_templates' as any) as any)
         .delete()
         .eq('id', id);
       if (error) throw error;
