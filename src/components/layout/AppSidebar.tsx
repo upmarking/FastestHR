@@ -2,7 +2,7 @@ import { useLocation, Link } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Clock, CalendarDays, DollarSign, BarChart3,
   Briefcase, GraduationCap, Headset, Megaphone, PieChart, Settings,
-  Globe, Building2, CreditCard, Server, ChevronLeft, LogOut, Zap
+  Globe, Building2, CreditCard, Server, ChevronLeft, LogOut, Zap, Wallet
 } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
