@@ -403,12 +403,14 @@ export type Database = {
           id: string
           industry: string | null
           is_active: boolean | null
+          license_limit: number | null
           logo_url: string | null
           name: string
           offer_sequence_current: number | null
           offer_sequence_prefix: string | null
           plan: string | null
           plan_expires_at: string | null
+          price_per_license: number | null
           setup_completed: boolean | null
           size: string | null
           slug: string
@@ -420,6 +422,7 @@ export type Database = {
           smtp_user: string | null
           timezone: string | null
           updated_at: string
+          wallet_balance: number | null
           work_days: string[] | null
         }
         Insert: {
@@ -430,12 +433,14 @@ export type Database = {
           id?: string
           industry?: string | null
           is_active?: boolean | null
+          license_limit?: number | null
           logo_url?: string | null
           name: string
           offer_sequence_current?: number | null
           offer_sequence_prefix?: string | null
           plan?: string | null
           plan_expires_at?: string | null
+          price_per_license?: number | null
           setup_completed?: boolean | null
           size?: string | null
           slug: string
@@ -447,6 +452,7 @@ export type Database = {
           smtp_user?: string | null
           timezone?: string | null
           updated_at?: string
+          wallet_balance?: number | null
           work_days?: string[] | null
         }
         Update: {
@@ -457,12 +463,14 @@ export type Database = {
           id?: string
           industry?: string | null
           is_active?: boolean | null
+          license_limit?: number | null
           logo_url?: string | null
           name?: string
           offer_sequence_current?: number | null
           offer_sequence_prefix?: string | null
           plan?: string | null
           plan_expires_at?: string | null
+          price_per_license?: number | null
           setup_completed?: boolean | null
           size?: string | null
           slug?: string
@@ -474,6 +482,7 @@ export type Database = {
           smtp_user?: string | null
           timezone?: string | null
           updated_at?: string
+          wallet_balance?: number | null
           work_days?: string[] | null
         }
         Relationships: []
@@ -2265,6 +2274,53 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wallet_transactions: {
+        Row: {
+          amount: number
+          company_id: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          razorpay_order_id: string | null
+          razorpay_payment_id: string | null
+          status: string
+          type: string
+        }
+        Insert: {
+          amount: number
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          razorpay_order_id?: string | null
+          razorpay_payment_id?: string | null
+          status?: string
+          type: string
+        }
+        Update: {
+          amount?: number
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          razorpay_order_id?: string | null
+          razorpay_payment_id?: string | null
+          status?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_transactions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
