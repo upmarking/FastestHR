@@ -26,6 +26,7 @@ import HelpDesk from '@/pages/HelpDesk';
 import Announcements from '@/pages/Announcements';
 import Reports from '@/pages/Reports';
 import Settings from '@/pages/Settings';
+import Billing from '@/pages/settings/Billing';
 import OfferView from '@/pages/recruitment/OfferView';
 
 
