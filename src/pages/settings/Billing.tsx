@@ -13,6 +13,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Wallet,
   Plus,
   CreditCard,
@@ -23,9 +30,12 @@ import {
   AlertTriangle,
   IndianRupee,
   ShieldCheck,
+  CalendarClock,
+  Clock,
+  RefreshCw,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth-store';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -40,8 +50,10 @@ export default function Billing() {
   const queryClient = useQueryClient();
   const [addCreditOpen, setAddCreditOpen] = useState(false);
   const [addSeatsOpen, setAddSeatsOpen] = useState(false);
+  const [extendOpen, setExtendOpen] = useState(false);
   const [creditAmount, setCreditAmount] = useState('');
   const [seatCount, setSeatCount] = useState('1');
+  const [extensionMonths, setExtensionMonths] = useState('1');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const { data: company, isLoading: companyLoading } = useQuery({
@@ -97,6 +109,11 @@ export default function Billing() {
     });
   };
 
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['billing-company'] });
+    queryClient.invalidateQueries({ queryKey: ['wallet-transactions'] });
+  };
+
   const handleAddCredits = async () => {
     const amount = parseFloat(creditAmount);
     if (!amount || amount < 100) {
@@ -109,11 +126,7 @@ export default function Billing() {
       await loadRazorpayScript();
 
       const { data, error } = await supabase.functions.invoke('razorpay-order', {
-        body: {
-          action: 'create_order',
-          amount,
-          company_id: profile?.company_id,
-        },
+        body: { action: 'create_order', amount, company_id: profile?.company_id },
       });
 
       if (error || data?.error) throw new Error(data?.error || error?.message);
@@ -139,8 +152,7 @@ export default function Billing() {
 
             if (verifyRes.data?.success) {
               toast.success(`₹${amount.toLocaleString()} added to wallet!`);
-              queryClient.invalidateQueries({ queryKey: ['billing-company'] });
-              queryClient.invalidateQueries({ queryKey: ['wallet-transactions'] });
+              invalidateAll();
               setAddCreditOpen(false);
               setCreditAmount('');
             } else {
@@ -149,9 +161,6 @@ export default function Billing() {
           } catch (err: any) {
             toast.error('Payment verification failed: ' + err.message);
           }
-        },
-        prefill: {
-          email: profile?.full_name ? undefined : undefined,
         },
         theme: { color: '#6366f1' },
       };
@@ -175,18 +184,13 @@ export default function Billing() {
     setIsProcessing(true);
     try {
       const { data, error } = await supabase.functions.invoke('razorpay-order', {
-        body: {
-          action: 'purchase_licenses',
-          amount: seats,
-          company_id: profile?.company_id,
-        },
+        body: { action: 'purchase_licenses', amount: seats, company_id: profile?.company_id },
       });
 
       if (error || data?.error) throw new Error(data?.error || error?.message);
 
-      toast.success(`${seats} license(s) added! New limit: ${data.new_license_limit}`);
-      queryClient.invalidateQueries({ queryKey: ['billing-company'] });
-      queryClient.invalidateQueries({ queryKey: ['wallet-transactions'] });
+      toast.success(`${seats} license(s) added! Prorated cost: ₹${data.prorated_cost?.toLocaleString()} for ${data.remaining_days} days`);
+      invalidateAll();
       setAddSeatsOpen(false);
       setSeatCount('1');
     } catch (err: any) {
@@ -196,10 +200,49 @@ export default function Billing() {
     }
   };
 
+  const handleExtendSubscription = async () => {
+    const months = parseInt(extensionMonths);
+    if (!months || months < 1) {
+      toast.error('Select at least 1 month');
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('razorpay-order', {
+        body: { action: 'extend_subscription', months, company_id: profile?.company_id },
+      });
+
+      if (error || data?.error) throw new Error(data?.error || error?.message);
+
+      toast.success(`Subscription extended! New expiry: ${new Date(data.new_expiry).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}`);
+      invalidateAll();
+      setExtendOpen(false);
+      setExtensionMonths('1');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to extend subscription');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const walletBalance = company?.wallet_balance || 0;
-  const licenseLimit = company?.license_limit || 5;
+  const licenseLimit = company?.license_limit || 1;
   const pricePerLicense = company?.price_per_license || 500;
-  const seatCost = parseInt(seatCount || '0') * pricePerLicense;
+  const plan = company?.plan || 'trial';
+  const planExpiresAt = company?.plan_expires_at ? new Date(company.plan_expires_at) : null;
+  const now = new Date();
+  const isExpired = planExpiresAt ? planExpiresAt <= now : false;
+  const daysRemaining = planExpiresAt ? Math.max(0, Math.ceil((planExpiresAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+
+  // Prorated seat cost calculation for UI
+  const seatsNum = parseInt(seatCount || '0');
+  const proratedPerSeat = daysRemaining > 0 ? Math.round((pricePerLicense / 30) * daysRemaining) : 0;
+  const seatCost = seatsNum * proratedPerSeat;
+
+  // Extension cost
+  const extMonths = parseInt(extensionMonths || '1');
+  const extensionCost = licenseLimit * pricePerLicense * extMonths;
 
   if (companyLoading) {
     return (
@@ -217,18 +260,52 @@ export default function Billing() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Billing & Subscription</h1>
-        <p className="text-muted-foreground mt-1">Manage your wallet, licenses, and transactions</p>
+        <p className="text-muted-foreground mt-1">Manage your wallet, licenses, and subscription</p>
       </div>
 
+      {/* Expiry Warning */}
+      {isExpired && (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="flex items-center gap-4 p-4">
+            <AlertTriangle className="w-6 h-6 text-destructive shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-destructive">Subscription Expired</p>
+              <p className="text-xs text-muted-foreground">
+                Your subscription expired on {planExpiresAt?.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}. Extend now to continue using all features.
+              </p>
+            </div>
+            <Button size="sm" className="ml-auto shrink-0 gap-1" onClick={() => setExtendOpen(true)}>
+              <RefreshCw className="h-3 w-3" /> Extend Now
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!isExpired && daysRemaining <= 7 && daysRemaining > 0 && (
+        <Card className="border-yellow-500/30 bg-yellow-500/5">
+          <CardContent className="flex items-center gap-4 p-4">
+            <Clock className="w-6 h-6 text-yellow-600 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-yellow-700">Subscription Expiring Soon</p>
+              <p className="text-xs text-muted-foreground">
+                {daysRemaining} day(s) remaining. Extend your subscription to avoid interruption.
+              </p>
+            </div>
+            <Button size="sm" variant="outline" className="ml-auto shrink-0 gap-1" onClick={() => setExtendOpen(true)}>
+              <RefreshCw className="h-3 w-3" /> Extend
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Top Cards */}
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-6 md:grid-cols-3">
         {/* Wallet Card */}
         <Card className="overflow-hidden border-primary/20">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <Wallet className="w-5 h-5 text-primary" /> Wallet Balance
             </CardTitle>
-            <CardDescription>Manage your credits and payments</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-baseline gap-1">
@@ -237,22 +314,9 @@ export default function Billing() {
                 {walletBalance.toLocaleString('en-IN')}
               </span>
             </div>
-
-            <div className="flex gap-3">
-              <Button
-                onClick={() => setAddCreditOpen(true)}
-                className="flex-1 gap-2"
-              >
-                <Plus className="h-4 w-4" /> Add Credits
-              </Button>
-              <Button
-                variant="outline"
-                className="flex-1 gap-2"
-                disabled
-              >
-                <CreditCard className="h-4 w-4" /> Redeem Gift Card
-              </Button>
-            </div>
+            <Button onClick={() => setAddCreditOpen(true)} className="w-full gap-2">
+              <Plus className="h-4 w-4" /> Add Credits
+            </Button>
           </CardContent>
         </Card>
 
@@ -260,44 +324,69 @@ export default function Billing() {
         <Card className="overflow-hidden border-primary/20">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <ShieldCheck className="w-5 h-5 text-primary" /> Subscription & Licenses
+              <ShieldCheck className="w-5 h-5 text-primary" /> Subscription
             </CardTitle>
-            <CardDescription>₹{pricePerLicense.toLocaleString()}/seat/month</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
-                <p className="text-[10px] uppercase text-muted-foreground font-medium tracking-wider">Total Seats</p>
-                <p className="text-3xl font-bold text-foreground">{licenseLimit}</p>
-                <p className="text-xs text-muted-foreground">{employeeCount} used</p>
-              </div>
-              <div className="p-3 rounded-lg bg-muted/50 border border-border/50">
-                <p className="text-[10px] uppercase text-muted-foreground font-medium tracking-wider">Status</p>
-                <Badge className="mt-2 bg-success/15 text-success border-success/30 hover:bg-success/20">
-                  ACTIVE
-                </Badge>
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  {company?.plan_expires_at
-                    ? `Expires ${new Date(company.plan_expires_at).toLocaleDateString()}`
-                    : 'No expiry set'}
-                </p>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Badge className={`uppercase text-[10px] ${
+                isExpired ? 'bg-destructive/15 text-destructive border-destructive/30' :
+                plan === 'trial' ? 'bg-yellow-500/15 text-yellow-700 border-yellow-500/30' :
+                'bg-success/15 text-success border-success/30'
+              } hover:bg-opacity-20`}>
+                {isExpired ? 'EXPIRED' : plan === 'trial' ? 'TRIAL' : 'ACTIVE'}
+              </Badge>
+              <span className="text-xs text-muted-foreground">₹{pricePerLicense}/seat/mo</span>
+            </div>
+            <div className="p-2.5 rounded-lg bg-muted/50 border border-border/50">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <CalendarClock className="w-3.5 h-3.5" />
+                {planExpiresAt
+                  ? isExpired
+                    ? `Expired ${planExpiresAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                    : `${daysRemaining} days left — ${planExpiresAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                  : 'No expiry set'}
               </div>
             </div>
+            <Button variant="outline" className="w-full gap-2" onClick={() => setExtendOpen(true)}>
+              <RefreshCw className="h-4 w-4" /> Extend Subscription
+            </Button>
+          </CardContent>
+        </Card>
 
+        {/* License Card */}
+        <Card className="overflow-hidden border-primary/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Users className="w-5 h-5 text-primary" /> Licenses
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-2.5 rounded-lg bg-muted/50 border border-border/50 text-center">
+                <p className="text-2xl font-bold text-foreground">{licenseLimit}</p>
+                <p className="text-[10px] uppercase text-muted-foreground tracking-wider">Total</p>
+              </div>
+              <div className="p-2.5 rounded-lg bg-muted/50 border border-border/50 text-center">
+                <p className="text-2xl font-bold text-foreground">{employeeCount}</p>
+                <p className="text-[10px] uppercase text-muted-foreground tracking-wider">Used</p>
+              </div>
+            </div>
             <Button
               variant="outline"
               className="w-full gap-2"
               onClick={() => setAddSeatsOpen(true)}
+              disabled={isExpired}
             >
-              <Users className="h-4 w-4" /> Add More Seats
-              <Plus className="h-3 w-3" />
+              <Plus className="h-4 w-4" /> Add Seats
             </Button>
+            {isExpired && <p className="text-[10px] text-destructive text-center">Extend subscription to add seats</p>}
           </CardContent>
         </Card>
       </div>
 
       {/* License Warning */}
-      {employeeCount >= licenseLimit && (
+      {employeeCount >= licenseLimit && !isExpired && (
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="flex items-center gap-4 p-4">
             <AlertTriangle className="w-6 h-6 text-destructive shrink-0" />
@@ -307,11 +396,7 @@ export default function Billing() {
                 You have {employeeCount} employees but only {licenseLimit} licenses. Purchase more seats to add new employees.
               </p>
             </div>
-            <Button
-              size="sm"
-              className="ml-auto shrink-0"
-              onClick={() => setAddSeatsOpen(true)}
-            >
+            <Button size="sm" className="ml-auto shrink-0" onClick={() => setAddSeatsOpen(true)}>
               Add Seats
             </Button>
           </CardContent>
@@ -347,8 +432,8 @@ export default function Billing() {
                           <AlertTriangle className="w-4 h-4 text-destructive" />
                         </div>
                       ) : (
-                        <div className="w-8 h-8 rounded-full bg-warning/10 flex items-center justify-center">
-                          <CreditCard className="w-4 h-4 text-warning" />
+                        <div className="w-8 h-8 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                          <CreditCard className="w-4 h-4 text-yellow-600" />
                         </div>
                       )
                     ) : (
@@ -379,7 +464,7 @@ export default function Billing() {
                       className={`text-[9px] uppercase px-1.5 py-0 h-4 border-none ${
                         tx.status === 'completed' ? 'text-success' :
                         tx.status === 'failed' ? 'text-destructive' :
-                        'text-warning'
+                        'text-yellow-600'
                       }`}
                     >
                       {tx.status}
@@ -448,7 +533,7 @@ export default function Billing() {
               <Users className="w-5 h-5 text-primary" /> Purchase Licenses
             </DialogTitle>
             <DialogDescription>
-              Each license costs ₹{pricePerLicense.toLocaleString()}/seat. Deducted from wallet.
+              Seats are prorated to your subscription expiry ({daysRemaining} days remaining).
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -461,10 +546,18 @@ export default function Billing() {
                 onChange={(e) => setSeatCount(e.target.value)}
               />
             </div>
-            <div className="p-3 rounded-lg bg-muted/50 border border-border/50 space-y-1">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">{seatCount || 0} seat(s) × ₹{pricePerLicense.toLocaleString()}</span>
-                <span className="font-bold">₹{seatCost.toLocaleString()}</span>
+            <div className="p-3 rounded-lg bg-muted/50 border border-border/50 space-y-1.5">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Price per seat (full month)</span>
+                <span>₹{pricePerLicense.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Prorated per seat ({daysRemaining} days)</span>
+                <span>₹{proratedPerSeat.toLocaleString()}</span>
+              </div>
+              <div className="border-t border-border/50 pt-1.5 flex justify-between text-sm">
+                <span className="font-medium text-foreground">{seatsNum} seat(s) total</span>
+                <span className="font-bold text-foreground">₹{seatCost.toLocaleString()}</span>
               </div>
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Wallet balance after</span>
@@ -483,10 +576,80 @@ export default function Billing() {
             <Button variant="outline" onClick={() => setAddSeatsOpen(false)}>Cancel</Button>
             <Button
               onClick={handlePurchaseSeats}
-              disabled={isProcessing || walletBalance < seatCost}
+              disabled={isProcessing || walletBalance < seatCost || seatCost === 0}
               className="gap-2"
             >
               {isProcessing ? 'Processing...' : `Purchase ${seatCount} Seat(s)`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Extend Subscription Dialog */}
+      <Dialog open={extendOpen} onOpenChange={setExtendOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="w-5 h-5 text-primary" /> Extend Subscription
+            </DialogTitle>
+            <DialogDescription>
+              Extend your subscription for all {licenseLimit} current seat(s) at ₹{pricePerLicense}/seat/month.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground uppercase">Duration</label>
+              <Select value={extensionMonths} onValueChange={setExtensionMonths}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 Month</SelectItem>
+                  <SelectItem value="3">3 Months</SelectItem>
+                  <SelectItem value="6">6 Months</SelectItem>
+                  <SelectItem value="12">12 Months</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="p-3 rounded-lg bg-muted/50 border border-border/50 space-y-1.5">
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{licenseLimit} seat(s) × ₹{pricePerLicense.toLocaleString()} × {extMonths} month(s)</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="font-medium text-foreground">Total</span>
+                <span className="font-bold text-foreground">₹{extensionCost.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Wallet balance after</span>
+                <span className={walletBalance - extensionCost < 0 ? 'text-destructive font-medium' : ''}>
+                  ₹{(walletBalance - extensionCost).toLocaleString()}
+                </span>
+              </div>
+              <div className="border-t border-border/50 pt-1.5 flex justify-between text-xs text-muted-foreground">
+                <span>New expiry</span>
+                <span className="text-foreground font-medium">
+                  {(() => {
+                    const base = (planExpiresAt && !isExpired) ? new Date(planExpiresAt) : new Date();
+                    base.setMonth(base.getMonth() + extMonths);
+                    return base.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+                  })()}
+                </span>
+              </div>
+            </div>
+            {walletBalance < extensionCost && (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" /> Insufficient wallet balance. Add credits first.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExtendOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleExtendSubscription}
+              disabled={isProcessing || walletBalance < extensionCost}
+              className="gap-2"
+            >
+              {isProcessing ? 'Processing...' : `Extend for ₹${extensionCost.toLocaleString()}`}
             </Button>
           </DialogFooter>
         </DialogContent>
