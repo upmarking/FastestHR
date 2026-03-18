@@ -32,10 +32,9 @@ export function AddCandidateDialog({ jobId }: AddCandidateDialogProps) {
   const { profile } = useAuthStore();
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
     phone: '',
     source: 'direct',
+    score: '',
   });
 
   const mutation = useMutation({
@@ -52,6 +51,7 @@ export function AddCandidateDialog({ jobId }: AddCandidateDialogProps) {
             phone: formData.phone || null,
             source: formData.source,
             stage: 'applied',
+            score: formData.score ? parseFloat(formData.score) : null,
           }
         ])
         .select();
@@ -63,7 +63,7 @@ export function AddCandidateDialog({ jobId }: AddCandidateDialogProps) {
       queryClient.invalidateQueries({ queryKey: ['candidates', jobId] });
       toast.success('Applicant added successfully');
       setIsOpen(false);
-      setFormData({ fullName: '', email: '', phone: '', source: 'direct' });
+      setFormData({ fullName: '', email: '', phone: '', source: 'direct', score: '' });
     },
     onError: (error) => {
       console.error('Error adding applicant:', error);
@@ -72,7 +72,7 @@ export function AddCandidateDialog({ jobId }: AddCandidateDialogProps) {
   });
 
   const handleClose = () => {
-    setFormData({ fullName: '', email: '', phone: '', source: 'direct' });
+    setFormData({ fullName: '', email: '', phone: '', source: 'direct', score: '' });
     setIsOpen(false);
   };
 
@@ -151,6 +151,20 @@ export function AddCandidateDialog({ jobId }: AddCandidateDialogProps) {
                 <SelectItem value="other">Other</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="score">Score (0.0 - 10.0)</Label>
+            <Input
+              id="score"
+              type="number"
+              step="0.1"
+              min="0"
+              max="10"
+              value={formData.score}
+              onChange={(e) => setFormData({ ...formData, score: e.target.value })}
+              placeholder="e.g. 8.5"
+              disabled={mutation.isPending}
+            />
           </div>
           <div className="flex justify-end pt-4 space-x-2">
             <Button type="button" variant="outline" onClick={handleClose} disabled={mutation.isPending}>

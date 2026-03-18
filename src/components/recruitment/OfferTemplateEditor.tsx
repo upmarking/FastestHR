@@ -25,6 +25,7 @@ interface OfferTemplate {
   letterhead_url: string | null;
   email_subject: string | null;
   email_body: string | null;
+  is_predefined_html: boolean;
   created_at: string;
 }
 
@@ -185,6 +186,7 @@ function OfferTemplateEditor({ isOpen, onClose, template }: { isOpen: boolean, o
   const [letterheadUrl, setLetterheadUrl] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
   const [emailBody, setEmailBody] = useState('');
+  const [isPredefinedHtml, setIsPredefinedHtml] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -194,12 +196,14 @@ function OfferTemplateEditor({ isOpen, onClose, template }: { isOpen: boolean, o
       setLetterheadUrl(template.letterhead_url || '');
       setEmailSubject(template.email_subject || '');
       setEmailBody(template.email_body || '');
+      setIsPredefinedHtml(template.is_predefined_html || false);
     } else {
       setName('');
       setHtmlContent('<h1>Offer Letter</h1>\n<p>Dear {{Name}},</p>\n<p>We are pleased to offer you the position of {{Designation}}...</p>\n<p>Joining Date: {{Joined Date}}</p>\n<p>Annual Payout: {{Payout}}</p>');
       setLetterheadUrl('');
       setEmailSubject('Offer of Employment — {{job_title}}');
       setEmailBody('Dear {{candidate_name}},\n\nWe are excited to offer you the position of {{job_title}}!\n\nPlease find your official offer letter attached as a PDF.\n\nYou can also view and accept your offer online:\n{{offer_link}}\n\nBest regards,\nThe Hiring Team');
+      setIsPredefinedHtml(false);
     }
   }, [template, isOpen]);
 
@@ -218,6 +222,7 @@ function OfferTemplateEditor({ isOpen, onClose, template }: { isOpen: boolean, o
         letterhead_url: letterheadUrl || null,
         email_subject: emailSubject || null,
         email_body: emailBody || null,
+        is_predefined_html: isPredefinedHtml,
       };
 
       if (template) {
@@ -318,6 +323,28 @@ function OfferTemplateEditor({ isOpen, onClose, template }: { isOpen: boolean, o
               />
               <p className="text-[10px] text-muted-foreground">This will be shown at the top of the A4 size letter.</p>
             </div>
+            
+            <div className="flex items-center space-x-2 my-4 p-3 bg-primary/5 rounded-lg border border-primary/10">
+              <input 
+                type="checkbox" 
+                id="predefined-html" 
+                checked={isPredefinedHtml}
+                onChange={(e) => setIsPredefinedHtml(e.target.checked)}
+                className="w-4 h-4 text-primary bg-background border-border rounded focus:ring-primary focus:ring-2"
+              />
+              <div className="grid gap-0.5 leading-none">
+                <label 
+                  htmlFor="predefined-html" 
+                  className="text-sm font-semibold leading-none cursor-pointer"
+                >
+                  Predefined HTML Mode
+                </label>
+                <p className="text-[11px] text-muted-foreground">
+                  Remove all default paddings, page breaks, and system styles. Use this if your HTML already has its own layout and page divisions.
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">HTML Content (Offer Letter PDF) *</label>
@@ -349,6 +376,7 @@ function OfferTemplateEditor({ isOpen, onClose, template }: { isOpen: boolean, o
                     'Payout': '$120,000.00',
                     'Offer Number': 'OFFER-2026-0001'
                   }}
+                  isPredefinedHtml={isPredefinedHtml}
                 />
               </div>
             </div>

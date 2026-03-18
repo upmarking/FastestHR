@@ -5,13 +5,15 @@ interface OfferLetterRendererProps {
   variables: Record<string, string>;
   letterheadUrl?: string | null;
   className?: string;
+  isPredefinedHtml?: boolean;
 }
 
 export function OfferLetterRenderer({ 
   htmlContent, 
   variables, 
   letterheadUrl,
-  className = "" 
+  className = "",
+  isPredefinedHtml = false
 }: OfferLetterRendererProps) {
   
   const finalHtml = useMemo(() => {
@@ -26,8 +28,8 @@ export function OfferLetterRenderer({
 
   return (
     <div className={`offer-letter-renderer ${className}`}>
-      <div className="a4-page shadow-2xl mx-auto bg-white relative overflow-hidden print:shadow-none print:m-0">
-        {letterheadUrl && (
+      <div className={`a4-page mx-auto bg-white relative overflow-hidden print:shadow-none print:m-0 ${isPredefinedHtml ? '' : 'shadow-2xl'}`}>
+        {letterheadUrl && !isPredefinedHtml && (
           <div className="letterhead-container w-full flex justify-center bg-white">
             <img 
               src={letterheadUrl} 
@@ -38,7 +40,7 @@ export function OfferLetterRenderer({
         )}
         
         <div 
-          className="content-area p-12 sm:p-16 md:p-20 prose prose-slate max-w-none dark:prose-invert"
+          className={`content-area max-w-none dark:prose-invert ${isPredefinedHtml ? '' : 'p-12 sm:p-16 md:p-20 prose prose-slate'}`}
           dangerouslySetInnerHTML={{ __html: finalHtml }}
         />
       </div>
@@ -62,6 +64,7 @@ export function OfferLetterRenderer({
           overflow: hidden;
         }
 
+        ${isPredefinedHtml ? '' : `
         .content-area {
           line-height: 1.6;
         }
@@ -106,6 +109,7 @@ export function OfferLetterRenderer({
           font-weight: 600; 
           color: #475569;
         }
+        `}
 
         @media print {
           .offer-letter-renderer {

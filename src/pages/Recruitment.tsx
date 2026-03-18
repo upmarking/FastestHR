@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Briefcase, Users, Plus, Loader2, Send } from 'lucide-react';
+import { Briefcase, Users, Plus, Loader2, Send, Star, Pencil } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -14,6 +14,7 @@ import { JobActions } from '@/components/recruitment/JobActions';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { OfferTemplateList } from '@/components/recruitment/OfferTemplateEditor';
+import { EditScoreDialog } from '@/components/recruitment/EditScoreDialog';
 
 
 const STAGE_COLORS: Record<string, string> = {
@@ -39,6 +40,8 @@ export default function Recruitment() {
   const navigate = useNavigate();
   const { profile } = useAuthStore();
   const [activeJob, setActiveJob] = useState<string | null>(null);
+  const [isScoreDialogOpen, setIsScoreDialogOpen] = useState(false);
+  const [selectedCandidate, setSelectedCandidate] = useState<any>(null);
   const queryClient = useQueryClient();
 
   const { data: jobs = [], isLoading: loadingJobs } = useQuery({
@@ -96,9 +99,6 @@ export default function Recruitment() {
               jobId={activeJob} 
             />
           ) as any}
-          <Button onClick={() => navigate('/recruitment/new')} className="gap-2">
-            <Plus className="h-4 w-4" /> New Job
-          </Button>
         </div>
       </div>
 
@@ -117,8 +117,17 @@ export default function Recruitment() {
             {/* Jobs List */}
             <div className="lg:col-span-1 space-y-4">
               <Card className="bg-background/50 border-border/50 backdrop-blur-sm h-full">
-                <CardHeader className="pb-3 border-b border-border/10">
+                <CardHeader className="pb-3 border-b border-border/10 flex flex-row items-center justify-between">
                   <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Active Jobs</CardTitle>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8 text-primary hover:bg-primary/10"
+                    onClick={() => navigate('/recruitment/new')}
+                    title="New Job"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
                 </CardHeader>
                 <CardContent className="p-2 space-y-1">
                   {loadingJobs ? (
@@ -160,7 +169,7 @@ export default function Recruitment() {
                               navigate(`/recruitment/edit/${job.id}`);
                             }}
                           >
-                            <Plus className="h-3.5 w-3.5 rotate-45" /> 
+                            <Pencil className="h-3.5 w-3.5" /> 
                             <span className="sr-only">Edit Job</span>
                           </Button>
                           <JobActions 
@@ -228,13 +237,38 @@ export default function Recruitment() {
                                       jobId={activeJob} 
                                       currentStage={candidate.stage}
                                       pipelineStages={currentPipelineStages}
+                                      candidateName={candidate.full_name}
+                                      score={candidate.score}
                                     />
                                   </div>
                                   
                                   <div className="flex flex-wrap gap-1.5">
-                                    <Badge variant="secondary" className="text-[10px] font-normal border-none bg-muted/60">
-                                      4.2 Score
-                                    </Badge>
+                                    {candidate.score !== null ? (
+                                      <Badge 
+                                        variant="secondary" 
+                                        className="text-[10px] font-normal border-none bg-muted/60 cursor-pointer hover:bg-primary/20 transition-colors"
+                                        onClick={() => {
+                                          setSelectedCandidate(candidate);
+                                          setIsScoreDialogOpen(true);
+                                        }}
+                                      >
+                                        <Star className="h-3 w-3 mr-1 text-primary fill-primary/20" />
+                                        {candidate.score} Score
+                                      </Badge>
+                                    ) : (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 px-2 text-[10px] text-muted-foreground hover:text-primary gap-1 lowercase"
+                                        onClick={() => {
+                                          setSelectedCandidate(candidate);
+                                          setIsScoreDialogOpen(true);
+                                        }}
+                                      >
+                                        <Plus className="h-3 w-3" />
+                                        add score
+                                      </Button>
+                                    )}
                                   </div>
                                 </CardContent>
                               </Card>
@@ -266,7 +300,17 @@ export default function Recruitment() {
           <OfferTemplateList />
         </TabsContent>
       </Tabs>
-
+      
+      {selectedCandidate && (
+        <EditScoreDialog
+          isOpen={isScoreDialogOpen}
+          onOpenChange={setIsScoreDialogOpen}
+          candidateId={selectedCandidate.id}
+          candidateName={selectedCandidate.full_name}
+          currentScore={selectedCandidate.score}
+          jobId={activeJob!}
+        />
+      )}
     </div>
   );
 }

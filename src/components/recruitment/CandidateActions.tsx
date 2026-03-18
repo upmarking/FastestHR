@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { MoreHorizontal, ArrowRight, XCircle, Trash2, Loader2, Send } from 'lucide-react';
+import { MoreHorizontal, ArrowRight, XCircle, Trash2, Loader2, Send, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { OfferDetailsDialog } from './OfferDetailsDialog';
 import { generateAndUploadOfferPDF, replaceHtmlVariables } from '@/lib/pdf-generator';
+import { EditScoreDialog } from './EditScoreDialog';
 
 import {
   DropdownMenu,
@@ -30,12 +31,22 @@ interface CandidateActionsProps {
   jobId: string;
   currentStage: string;
   pipelineStages?: string[];
+  candidateName: string;
+  score: number | null;
 }
 
-export function CandidateActions({ candidateId, jobId, currentStage, pipelineStages = [] }: CandidateActionsProps) {
+export function CandidateActions({ 
+  candidateId, 
+  jobId, 
+  currentStage, 
+  pipelineStages = [],
+  candidateName,
+  score 
+}: CandidateActionsProps) {
   const queryClient = useQueryClient();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isOfferDialogOpen, setIsOfferDialogOpen] = useState(false);
+  const [isScoreDialogOpen, setIsScoreDialogOpen] = useState(false);
   const [candidate, setCandidate] = useState<{ full_name: string } | null>(null);
   const [pendingStage, setPendingStage] = useState<string | null>(null);
   const [isSubmittingOffer, setIsSubmittingOffer] = useState(false);
@@ -99,7 +110,8 @@ export function CandidateActions({ candidateId, jobId, currentStage, pipelineSta
           payout: offerData.payout,
           offerNumber: offerNumberStr,
           companyId: (job as any).company_id,
-          candidateId: candidateId
+          candidateId: candidateId,
+          isPredefinedHtml: template.is_predefined_html
         });
 
         // 4. Get the final HTML string for inline preview
@@ -122,7 +134,8 @@ export function CandidateActions({ candidateId, jobId, currentStage, pipelineSta
             html_content: finalHtml,
             pdf_path: pdfPath,
             offer_number: offerNumberStr,
-            template_id: templateId
+            template_id: templateId,
+            is_predefined_html: template.is_predefined_html
           }
         });
         
@@ -283,6 +296,10 @@ export function CandidateActions({ candidateId, jobId, currentStage, pipelineSta
             <XCircle className="mr-2 h-4 w-4" />
             Reject
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setIsScoreDialogOpen(true)}>
+            <Star className="mr-2 h-4 w-4" />
+            Edit Score
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem 
             onClick={() => setIsDeleteDialogOpen(true)}
@@ -326,6 +343,14 @@ export function CandidateActions({ candidateId, jobId, currentStage, pipelineSta
         isSubmitting={isSubmittingOffer}
         defaultJoiningDate={existingOffer?.joining_date}
         defaultPayout={existingOffer?.payout}
+      />
+      <EditScoreDialog
+        isOpen={isScoreDialogOpen}
+        onOpenChange={setIsScoreDialogOpen}
+        candidateId={candidateId}
+        candidateName={candidateName}
+        currentScore={score}
+        jobId={jobId}
       />
     </>
   );

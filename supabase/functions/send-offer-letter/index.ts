@@ -25,7 +25,8 @@ Deno.serve(async (req) => {
       html_content,
       pdf_path,
       offer_number,
-      template_id
+      template_id,
+      is_predefined_html
     } = await req.json();
 
     if (!candidate_id || !job_id || !company_id || !pdf_path || !html_content) {
@@ -76,7 +77,8 @@ Deno.serve(async (req) => {
         joining_date: offer_data?.joiningDate,
         payout: offer_data?.payout,
         html_content: html_content,
-        pdf_url: pdf_path
+        pdf_url: pdf_path,
+        is_predefined_html: is_predefined_html || false
       })
       .select()
       .single();

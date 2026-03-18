@@ -109,6 +109,7 @@ export default function OfferView() {
           htmlContent={offer.html_content}
           variables={variables}
           letterheadUrl={offer.letterhead_url}
+          isPredefinedHtml={offer.is_predefined_html}
         />
 
         {/* Footer (Hidden on print) */}

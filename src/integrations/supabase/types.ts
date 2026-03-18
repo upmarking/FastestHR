@@ -249,6 +249,7 @@ export type Database = {
           phone: string | null
           rejection_reason: string | null
           resume_url: string | null
+          score: number | null
           source: string | null
           stage: Database["public"]["Enums"]["candidate_stage"] | null
           updated_at: string
@@ -265,6 +266,7 @@ export type Database = {
           phone?: string | null
           rejection_reason?: string | null
           resume_url?: string | null
+          score?: number | null
           source?: string | null
           stage?: Database["public"]["Enums"]["candidate_stage"] | null
           updated_at?: string
@@ -281,6 +283,7 @@ export type Database = {
           phone?: string | null
           rejection_reason?: string | null
           resume_url?: string | null
+          score?: number | null
           source?: string | null
           stage?: Database["public"]["Enums"]["candidate_stage"] | null
           updated_at?: string
