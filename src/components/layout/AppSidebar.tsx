@@ -28,6 +28,7 @@ const mainNav = [
   { title: 'Help Desk', url: '/helpdesk', icon: Headset },
   { title: 'Announcements', url: '/announcements', icon: Megaphone },
   { title: 'Reports', url: '/reports', icon: PieChart },
+  { title: 'Billing', url: '/billing', icon: Wallet },
   { title: 'Settings', url: '/settings', icon: Settings },
 ];
 
