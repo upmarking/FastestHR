@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AuthLayout } from '@/components/layout/AuthLayout';
+import { EmailVerificationPending } from '@/components/auth/EmailVerificationPending';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -44,6 +45,7 @@ export default function Register() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
@@ -73,14 +75,26 @@ export default function Register() {
 
       if (authError) throw authError;
 
-      toast.success('Account created! Please check your email to verify.');
-      navigate('/login');
+      // Store the timestamp for cooldown
+      localStorage.setItem('fastesthr_resend_ts', Date.now().toString());
+      setPendingEmail(data.email);
     } catch (err: any) {
       toast.error(err.message || 'Registration failed');
     } finally {
       setLoading(false);
     }
   };
+
+  if (pendingEmail) {
+    return (
+      <AuthLayout title="Check your email" subtitle="One last step to get started">
+        <EmailVerificationPending
+          email={pendingEmail}
+          onBackToLogin={() => navigate('/login')}
+        />
+      </AuthLayout>
+    );
+  }
 
   return (
     <AuthLayout title="Create your account" subtitle="Start your 14-day free trial. No credit card required.">
