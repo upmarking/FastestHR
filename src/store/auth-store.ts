@@ -8,7 +8,7 @@ interface Profile {
   full_name: string;
   avatar_url: string | null;
   phone: string | null;
-  platform_role: 'super_admin' | 'company_admin' | 'user';
+  platform_role: 'super_admin' | 'company_admin' | 'hr_manager' | 'recruiter' | 'user';
   is_active: boolean;
   last_login_at: string | null;
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Moon, Sun, Search, Menu } from 'lucide-react';
+import { Moon, Sun, Search, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
@@ -10,6 +10,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { useAuthStore } from '@/store/auth-store';
 import { useTheme } from '@/hooks/use-theme';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { NotificationsDropdown } from './NotificationsDropdown';
 import { Badge } from '@/components/ui/badge';
 import {
   CommandDialog,
@@ -102,12 +103,7 @@ export function Topbar() {
       </Button>
 
       {/* Notifications */}
-      <Button variant="ghost" size="icon" className="relative h-9 w-9">
-        <Bell className="h-4 w-4" />
-        <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
-          3
-        </span>
-      </Button>
+      <NotificationsDropdown />
 
       {/* User menu */}
       <DropdownMenu>

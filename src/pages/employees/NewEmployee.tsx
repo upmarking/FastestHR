@@ -14,6 +14,46 @@ const EMPLOYMENT_TYPES = ['full_time', 'part_time', 'contract', 'intern'] as con
 const STATUSES = ['active', 'probation', 'on_leave', 'resigned', 'terminated'] as const;
 const GENDERS = ['male', 'female', 'other', 'prefer_not_to_say'] as const;
 
+const Field = ({ label, name, value, onChange, type = 'text', required = false, placeholder = '' }: {
+  label: string; name: string; value: string | number; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; type?: string; required?: boolean; placeholder?: string;
+}) => (
+  <div className="space-y-1.5">
+    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+      {label}{required && <span className="text-destructive ml-0.5">*</span>}
+    </label>
+    <Input
+      type={type}
+      name={name}
+      value={value}
+      onChange={onChange}
+      required={required}
+      placeholder={placeholder}
+      className="bg-background/50 border-border/50 text-sm h-10 focus:border-primary"
+    />
+  </div>
+);
+
+const SelectField = ({ label, name, value, onChange, options, required = false }: {
+  label: string; name: string; value: string | number; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; options: { value: string; label: string }[]; required?: boolean;
+}) => (
+  <div className="space-y-1.5">
+    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+      {label}{required && <span className="text-destructive ml-0.5">*</span>}
+    </label>
+    <select
+      name={name}
+      value={value}
+      onChange={onChange}
+      className="flex h-10 w-full rounded-md border border-border/50 bg-background/50 px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+    >
+      <option value="">— Select —</option>
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </select>
+  </div>
+);
+
 export default function NewEmployee() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -117,45 +157,7 @@ export default function NewEmployee() {
     createMutation.mutate(form);
   };
 
-  const Field = ({ label, name, type = 'text', required = false, placeholder = '' }: {
-    label: string; name: string; type?: string; required?: boolean; placeholder?: string;
-  }) => (
-    <div className="space-y-1.5">
-      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-        {label}{required && <span className="text-destructive ml-0.5">*</span>}
-      </label>
-      <Input
-        type={type}
-        name={name}
-        value={(form as any)[name]}
-        onChange={handleChange}
-        required={required}
-        placeholder={placeholder}
-        className="bg-background/50 border-border/50 text-sm h-10 focus:border-primary"
-      />
-    </div>
-  );
 
-  const SelectField = ({ label, name, options, required = false }: {
-    label: string; name: string; options: { value: string; label: string }[]; required?: boolean;
-  }) => (
-    <div className="space-y-1.5">
-      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-        {label}{required && <span className="text-destructive ml-0.5">*</span>}
-      </label>
-      <select
-        name={name}
-        value={(form as any)[name]}
-        onChange={handleChange}
-        className="flex h-10 w-full rounded-md border border-border/50 bg-background/50 px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-      >
-        <option value="">— Select —</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
-    </div>
-  );
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
@@ -188,16 +190,18 @@ export default function NewEmployee() {
             <CardDescription className="text-xs font-medium">Basic personal details of the employee</CardDescription>
           </CardHeader>
           <CardContent className="pt-6 grid sm:grid-cols-2 gap-4">
-            <Field label="First Name" name="first_name" required placeholder="John" />
-            <Field label="Last Name" name="last_name" required placeholder="Doe" />
-            <Field label="Date of Birth" name="date_of_birth" type="date" />
+            <Field label="First Name" name="first_name" value={form.first_name} onChange={handleChange} required placeholder="John" />
+            <Field label="Last Name" name="last_name" value={form.last_name} onChange={handleChange} required placeholder="Doe" />
+            <Field label="Date of Birth" name="date_of_birth" value={form.date_of_birth} onChange={handleChange} type="date" />
             <SelectField
               label="Gender"
               name="gender"
+              value={form.gender}
+              onChange={handleChange}
               options={GENDERS.map((g) => ({ value: g, label: g.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) }))}
             />
-            <Field label="Personal Email" name="personal_email" type="email" placeholder="john@personal.com" />
-            <Field label="Phone" name="phone" placeholder="+1 (555) 000-0000" />
+            <Field label="Personal Email" name="personal_email" value={form.personal_email} onChange={handleChange} type="email" placeholder="john@personal.com" />
+            <Field label="Phone" name="phone" value={form.phone} onChange={handleChange} placeholder="+1 (555) 000-0000" />
           </CardContent>
         </Card>
 
@@ -211,27 +215,35 @@ export default function NewEmployee() {
             <CardDescription className="text-xs font-medium">Work-related information</CardDescription>
           </CardHeader>
           <CardContent className="pt-6 grid sm:grid-cols-2 gap-4">
-            <Field label="Work Email" name="work_email" type="email" required placeholder="john@company.com" />
-            <Field label="Employee Code" name="employee_code" placeholder="EMP-001" />
-            <Field label="Date of Joining" name="date_of_joining" type="date" />
+            <Field label="Work Email" name="work_email" value={form.work_email} onChange={handleChange} type="email" required placeholder="john@company.com" />
+            <Field label="Employee Code" name="employee_code" value={form.employee_code} onChange={handleChange} placeholder="EMP-001" />
+            <Field label="Date of Joining" name="date_of_joining" value={form.date_of_joining} onChange={handleChange} type="date" />
             <SelectField
               label="Employment Type"
               name="employment_type"
+              value={form.employment_type}
+              onChange={handleChange}
               options={EMPLOYMENT_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) }))}
             />
             <SelectField
               label="Department"
               name="department_id"
+              value={form.department_id}
+              onChange={handleChange}
               options={departments.map((d: any) => ({ value: d.id, label: d.name }))}
             />
             <SelectField
               label="Designation / Role"
               name="designation_id"
+              value={form.designation_id}
+              onChange={handleChange}
               options={designations.map((d: any) => ({ value: d.id, label: d.title }))}
             />
             <SelectField
               label="Reporting Manager"
               name="reporting_manager_id"
+              value={form.reporting_manager_id}
+              onChange={handleChange}
               options={managers.map((m: any) => ({
                 value: m.id,
                 label: `${m.first_name} ${m.last_name}${m.employee_code ? ` (${m.employee_code})` : ''}`,
@@ -240,6 +252,8 @@ export default function NewEmployee() {
             <SelectField
               label="Status"
               name="status"
+              value={form.status}
+              onChange={handleChange}
               options={STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) }))}
             />
           </CardContent>

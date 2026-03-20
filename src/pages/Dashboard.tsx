@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Users, Clock, CalendarDays, Briefcase, DollarSign, UserPlus,
-  Megaphone, TrendingUp, ArrowRight
+  Megaphone, TrendingUp, ArrowRight, BarChart3, PieChart, Cake, PartyPopper, TrendingDown, MessageSquare
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -90,6 +90,115 @@ function CompanyAdminDashboard() {
     },
     enabled: !!profile?.company_id,
   });
+
+  const { data: departmentStats = [] } = useQuery({
+    queryKey: ['dept-stats', profile?.company_id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('employees')
+        .select('departments(name)')
+        .eq('company_id', profile!.company_id!)
+        .is('deleted_at', null);
+      const map: Record<string, number> = {};
+      (data || []).forEach((e: any) => { const n = e.departments?.name || 'Unassigned'; map[n] = (map[n] || 0) + 1; });
+      return Object.entries(map).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 5);
+    },
+    enabled: !!profile?.company_id,
+  });
+
+  const { data: payrollSummary } = useQuery({
+    queryKey: ['payroll-summary', profile?.company_id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('payroll_runs')
+        .select('total_gross, total_net, total_deductions, period_end')
+        .eq('company_id', profile!.company_id!)
+        .order('period_end', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!profile?.company_id,
+  });
+
+  // Hiring stats — employees joined this year
+  const thisYear = new Date().getFullYear();
+  const { data: hiringStats } = useQuery({
+    queryKey: ['hiring-stats', profile?.company_id, thisYear],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('employees')
+        .select('date_of_joining')
+        .eq('company_id', profile!.company_id!)
+        .is('deleted_at', null)
+        .gte('date_of_joining', `${thisYear}-01-01`)
+        .lte('date_of_joining', `${thisYear}-12-31`);
+
+      const monthly: Record<number, number> = {};
+      (data || []).forEach((e: any) => {
+        if (e.date_of_joining) {
+          const m = new Date(e.date_of_joining).getMonth();
+          monthly[m] = (monthly[m] || 0) + 1;
+        }
+      });
+      return { total: (data || []).length, monthly };
+    },
+    enabled: !!profile?.company_id,
+  });
+
+  // Attrition — count of employees with deleted_at this year
+  const { data: attritionCount = 0 } = useQuery({
+    queryKey: ['attrition', profile?.company_id, thisYear],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('employees')
+        .select('*', { count: 'exact', head: true })
+        .eq('company_id', profile!.company_id!)
+        .not('deleted_at', 'is', null)
+        .gte('deleted_at', `${thisYear}-01-01T00:00:00Z`);
+      return count || 0;
+    },
+    enabled: !!profile?.company_id,
+  });
+
+  // Birthdays & Anniversaries
+  const { data: celebrations = { birthdays: [], anniversaries: [] } } = useQuery({
+    queryKey: ['celebrations', profile?.company_id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name, date_of_birth, date_of_joining, avatar_url')
+        .eq('company_id', profile!.company_id!)
+        .is('deleted_at', null);
+      if (!data) return { birthdays: [], anniversaries: [] };
+      const now = new Date();
+      const upcomingBdays = data.filter((e: any) => {
+        if (!e.date_of_birth) return false;
+        const dob = new Date(e.date_of_birth);
+        const bday = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
+        const diff = (bday.getTime() - now.getTime()) / (1000*60*60*24);
+        return diff >= 0 && diff <= 30;
+      }).sort((a: any, b: any) => {
+        const da = new Date(a.date_of_birth), db = new Date(b.date_of_birth);
+        return new Date(now.getFullYear(), da.getMonth(), da.getDate()).getTime() - new Date(now.getFullYear(), db.getMonth(), db.getDate()).getTime();
+      }).slice(0, 5);
+      const upcomingAnnis = data.filter((e: any) => {
+        if (!e.date_of_joining) return false;
+        const doj = new Date(e.date_of_joining);
+        const anni = new Date(now.getFullYear(), doj.getMonth(), doj.getDate());
+        const diff = (anni.getTime() - now.getTime()) / (1000*60*60*24);
+        return diff >= 0 && diff <= 30 && now.getFullYear() > doj.getFullYear();
+      }).sort((a: any, b: any) => {
+        const da = new Date(a.date_of_joining), db = new Date(b.date_of_joining);
+        return new Date(now.getFullYear(), da.getMonth(), da.getDate()).getTime() - new Date(now.getFullYear(), db.getMonth(), db.getDate()).getTime();
+      }).slice(0, 5);
+      return { birthdays: upcomingBdays, anniversaries: upcomingAnnis };
+    },
+    enabled: !!profile?.company_id,
+  });
+
+  const attritionRate = employeeCount > 0 ? ((attritionCount as number) / ((employeeCount as number) + (attritionCount as number)) * 100).toFixed(1) : '0.0';
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   return (
     <div className="space-y-6">
@@ -187,15 +296,215 @@ function CompanyAdminDashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Analytics Section */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Department Distribution */}
+        <Card>
+          <CardHeader className="border-b border-border/50 pb-4">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <PieChart className="w-4 h-4" /> Department Distribution
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {departmentStats.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No department data</p>
+            ) : (
+              <div className="space-y-3">
+                {departmentStats.map((dept: any, i: number) => {
+                  const colors = ['bg-primary', 'bg-info', 'bg-warning', 'bg-success', 'bg-destructive'];
+                  const pct = employeeCount > 0 ? Math.round((dept.count / (employeeCount as number)) * 100) : 0;
+                  return (
+                    <div key={dept.name} className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span>{dept.name}</span>
+                        <span className="text-muted-foreground">{dept.count} ({pct}%)</span>
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-muted/30">
+                        <div className={`h-full rounded-full ${colors[i % colors.length]} transition-all`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Payroll Cost Summary */}
+        <Card>
+          <CardHeader className="border-b border-border/50 pb-4">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BarChart3 className="w-4 h-4" /> Payroll Summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {!payrollSummary ? (
+              <div className="flex flex-col items-center gap-2 py-6">
+                <DollarSign className="h-8 w-8 text-muted-foreground/30" />
+                <p className="text-sm text-muted-foreground">No payroll data yet</p>
+                <Button variant="outline" size="sm" onClick={() => navigate('/payroll')}>Run Payroll</Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-xs text-muted-foreground">Latest cycle ending {payrollSummary.period_end}</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="text-center p-3 rounded bg-primary/5 border border-primary/20">
+                    <p className="text-xs text-muted-foreground">Gross</p>
+                    <p className="text-lg font-bold text-primary">${((payrollSummary.total_gross || 0) / 1000).toFixed(0)}k</p>
+                  </div>
+                  <div className="text-center p-3 rounded bg-destructive/5 border border-destructive/20">
+                    <p className="text-xs text-muted-foreground">Deductions</p>
+                    <p className="text-lg font-bold text-destructive">${((payrollSummary.total_deductions || 0) / 1000).toFixed(0)}k</p>
+                  </div>
+                  <div className="text-center p-3 rounded bg-success/5 border border-success/20">
+                    <p className="text-xs text-muted-foreground">Net</p>
+                    <p className="text-lg font-bold text-success">${((payrollSummary.total_net || 0) / 1000).toFixed(0)}k</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Hiring Stats & Attrition */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader className="border-b border-border/50 pb-4">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TrendingUp className="w-4 h-4" /> Hiring Trend ({thisYear})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="flex items-end gap-1 h-32">
+              {months.map((m, i) => {
+                const count = hiringStats?.monthly?.[i] || 0;
+                const maxCount = Math.max(...Object.values(hiringStats?.monthly || { 0: 1 }), 1);
+                const pct = Math.max(4, (count / maxCount) * 100);
+                return (
+                  <div key={m} className="flex-1 flex flex-col items-center gap-1">
+                    <span className="text-[10px] text-muted-foreground">{count || ''}</span>
+                    <div className="w-full rounded-t bg-primary/20 hover:bg-primary/40 transition-colors" style={{ height: `${pct}%` }} />
+                    <span className="text-[9px] text-muted-foreground">{m}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-between mt-3 pt-3 border-t border-border/50">
+              <span className="text-sm text-muted-foreground">Total hires this year</span>
+              <span className="font-bold text-primary">{hiringStats?.total || 0}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b border-border/50 pb-4">
+            <CardTitle className="text-base">Workforce</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 space-y-4">
+            <div className="text-center p-4 rounded bg-primary/5 border border-primary/20">
+              <p className="text-xs text-muted-foreground">Headcount</p>
+              <p className="text-3xl font-bold text-primary">{employeeCount}</p>
+            </div>
+            <div className="text-center p-4 rounded bg-destructive/5 border border-destructive/20">
+              <p className="text-xs text-muted-foreground flex items-center justify-center gap-1"><TrendingDown className="w-3 h-3" /> Attrition Rate</p>
+              <p className="text-3xl font-bold text-destructive">{attritionRate}%</p>
+              <p className="text-[10px] text-muted-foreground mt-1">{attritionCount} exits this year</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Birthdays & Anniversaries */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader className="border-b border-border/50 pb-4">
+            <CardTitle className="flex items-center gap-2 text-base"><Cake className="w-4 h-4" /> Upcoming Birthdays</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {celebrations.birthdays.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-6"><Cake className="h-8 w-8 text-muted-foreground/30" /><p className="text-sm text-muted-foreground">No upcoming birthdays</p></div>
+            ) : (
+              <div className="space-y-2">
+                {celebrations.birthdays.map((emp: any) => {
+                  const dob = new Date(emp.date_of_birth);
+                  const now2 = new Date();
+                  const bday = new Date(now2.getFullYear(), dob.getMonth(), dob.getDate());
+                  const daysUntil = Math.ceil((bday.getTime() - now2.getTime()) / (1000*60*60*24));
+                  return (
+                    <div key={emp.id} className="flex items-center gap-3 p-2 rounded bg-background/50 border border-border/50">
+                      <div className="w-8 h-8 rounded-full bg-success/10 flex items-center justify-center text-success"><Cake className="w-4 h-4" /></div>
+                      <div className="flex-1"><p className="text-sm font-medium">{emp.first_name} {emp.last_name}</p><p className="text-xs text-muted-foreground">{dob.toLocaleDateString('en-US', {month:'short',day:'numeric'})}</p></div>
+                      <Badge variant="outline" className={`text-[10px] ${daysUntil === 0 ? 'border-success text-success bg-success/10' : ''}`}>{daysUntil === 0 ? 'Today! 🎉' : `${daysUntil}d`}</Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b border-border/50 pb-4">
+            <CardTitle className="flex items-center gap-2 text-base"><PartyPopper className="w-4 h-4" /> Work Anniversaries</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {celebrations.anniversaries.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-6"><PartyPopper className="h-8 w-8 text-muted-foreground/30" /><p className="text-sm text-muted-foreground">No upcoming anniversaries</p></div>
+            ) : (
+              <div className="space-y-2">
+                {celebrations.anniversaries.map((emp: any) => {
+                  const doj = new Date(emp.date_of_joining);
+                  const now2 = new Date();
+                  const anni = new Date(now2.getFullYear(), doj.getMonth(), doj.getDate());
+                  const daysUntil = Math.ceil((anni.getTime() - now2.getTime()) / (1000*60*60*24));
+                  const years = now2.getFullYear() - doj.getFullYear();
+                  return (
+                    <div key={emp.id} className="flex items-center gap-3 p-2 rounded bg-background/50 border border-border/50">
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary"><PartyPopper className="w-4 h-4" /></div>
+                      <div className="flex-1"><p className="text-sm font-medium">{emp.first_name} {emp.last_name}</p><p className="text-xs text-muted-foreground">{years} year{years > 1 ? 's' : ''} · {doj.toLocaleDateString('en-US', {month:'short',day:'numeric'})}</p></div>
+                      <Badge variant="outline" className={`text-[10px] ${daysUntil === 0 ? 'border-primary text-primary bg-primary/10' : ''}`}>{daysUntil === 0 ? 'Today! 🎊' : `${daysUntil}d`}</Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
 
 function EmployeeDashboard() {
   const { profile } = useAuthStore();
+  const navigate = useNavigate();
   const now = new Date();
   const hour = now.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+  const { data: employee } = useQuery({
+    queryKey: ['my-employee', profile?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('employees').select('id').eq('user_id', profile!.id).is('deleted_at', null).maybeSingle();
+      return data;
+    },
+    enabled: !!profile?.id,
+  });
+
+  const { data: leaveBalances = [] } = useQuery({
+    queryKey: ['leave-balances', employee?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('leave_balances')
+        .select('*, leave_types(name)')
+        .eq('employee_id', employee!.id)
+        .eq('year', new Date().getFullYear());
+      return data || [];
+    },
+    enabled: !!employee?.id,
+  });
 
   return (
     <div className="space-y-6">
@@ -212,7 +521,7 @@ function EmployeeDashboard() {
           <CardContent className="flex flex-col items-center gap-4 p-6">
             <Clock className="h-12 w-12 text-primary" />
             <p className="text-lg font-semibold">Today's Attendance</p>
-            <Button size="lg" className="w-full">Clock In</Button>
+            <Button size="lg" className="w-full" onClick={() => navigate('/attendance')}>Clock In</Button>
           </CardContent>
         </Card>
 
@@ -222,10 +531,24 @@ function EmployeeDashboard() {
             <CardTitle className="text-lg">Leave Balances</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col items-center gap-2 py-4 text-center">
-              <CalendarDays className="h-8 w-8 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">No leave data yet</p>
-            </div>
+            {leaveBalances.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-4 text-center">
+                <CalendarDays className="h-8 w-8 text-muted-foreground/50" />
+                <p className="text-sm text-muted-foreground">No leave data yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {leaveBalances.slice(0, 4).map((lb: any) => {
+                  const remaining = (lb.total_days || 0) - (lb.used_days || 0);
+                  return (
+                    <div key={lb.id} className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">{lb.leave_types?.name || 'Leave'}</span>
+                      <span className="font-semibold text-primary">{remaining} <span className="text-xs text-muted-foreground">/ {lb.total_days}</span></span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -235,11 +558,17 @@ function EmployeeDashboard() {
             <CardTitle className="text-lg">Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <Button variant="outline" className="w-full justify-start gap-2">
+            <Button variant="outline" className="w-full justify-start gap-2" onClick={() => navigate('/leave/apply')}>
               <CalendarDays className="h-4 w-4" /> Apply Leave
             </Button>
-            <Button variant="outline" className="w-full justify-start gap-2">
+            <Button variant="outline" className="w-full justify-start gap-2" onClick={() => navigate('/performance')}>
               <TrendingUp className="h-4 w-4" /> My Goals
+            </Button>
+            <Button variant="outline" className="w-full justify-start gap-2" onClick={() => navigate('/helpdesk')}>
+              <Briefcase className="h-4 w-4" /> Raise Ticket
+            </Button>
+            <Button variant="outline" className="w-full justify-start gap-2" onClick={() => navigate('/documents')}>
+              <BarChart3 className="h-4 w-4" /> Documents
             </Button>
           </CardContent>
         </Card>
@@ -273,10 +602,144 @@ function SuperAdminDashboard() {
   );
 }
 
+function HRManagerDashboard() {
+  const navigate = useNavigate();
+  const { profile } = useAuthStore();
+
+  const { data: employeeCount = 0 } = useQuery({
+    queryKey: ['employee-count', profile?.company_id],
+    queryFn: async () => {
+      const { count } = await supabase.from('employees').select('*', { count: 'exact', head: true }).eq('company_id', profile!.company_id!).is('deleted_at', null);
+      return count || 0;
+    },
+    enabled: !!profile?.company_id,
+  });
+
+  const { data: pendingLeaves = [] } = useQuery({
+    queryKey: ['pending-leaves', profile?.company_id],
+    queryFn: async () => {
+      const { data } = await supabase.from('leave_requests').select('*, employees!leave_requests_employee_id_fkey(first_name, last_name)').eq('company_id', profile!.company_id!).eq('status', 'pending').limit(5);
+      return data || [];
+    },
+    enabled: !!profile?.company_id,
+  });
+
+  const { data: openTickets = 0 } = useQuery({
+    queryKey: ['open-tickets', profile?.company_id],
+    queryFn: async () => {
+      const { count } = await supabase.from('tickets').select('*', { count: 'exact', head: true }).eq('company_id', profile!.company_id!).in('status', ['open', 'in_progress']);
+      return count || 0;
+    },
+    enabled: !!profile?.company_id,
+  });
+
+  const { data: birthdays = [] } = useQuery({
+    queryKey: ['upcoming-birthdays', profile?.company_id],
+    queryFn: async () => {
+      const { data } = await supabase.from('employees').select('id, first_name, last_name, date_of_birth, avatar_url').eq('company_id', profile!.company_id!).is('deleted_at', null).not('date_of_birth', 'is', null);
+      if (!data) return [];
+      const now = new Date();
+      return data.filter((e: any) => {
+        const dob = new Date(e.date_of_birth);
+        const bday = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
+        const diff = (bday.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+        return diff >= 0 && diff <= 30;
+      }).sort((a: any, b: any) => {
+        const da = new Date(a.date_of_birth), db = new Date(b.date_of_birth);
+        return new Date(now.getFullYear(), da.getMonth(), da.getDate()).getTime() - new Date(now.getFullYear(), db.getMonth(), db.getDate()).getTime();
+      }).slice(0, 5);
+    },
+    enabled: !!profile?.company_id,
+  });
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">HR Dashboard</h1>
+        <p className="text-muted-foreground mt-1">Welcome back, {profile?.full_name}</p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard title="Total Employees" value={employeeCount} icon={Users} color="bg-primary/10 text-primary" />
+        <MetricCard title="Pending Leaves" value={pendingLeaves.length} icon={CalendarDays} color="bg-warning/10 text-warning" />
+        <MetricCard title="Open Tickets" value={openTickets} icon={MessageSquare} color="bg-info/10 text-info" />
+        <MetricCard title="Upcoming Birthdays" value={birthdays.length} icon={Cake} color="bg-success/10 text-success" />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <CardHeader className="border-b border-border/50 pb-4 flex flex-row items-center justify-between">
+            <CardTitle>Pending Leave Requests</CardTitle>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/leave')}>View All <ArrowRight className="ml-1 h-4 w-4" /></Button>
+          </CardHeader>
+          <CardContent>
+            {pendingLeaves.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-8"><CalendarDays className="h-10 w-10 text-muted-foreground/50" /><p className="text-sm text-muted-foreground">No pending requests</p></div>
+            ) : (
+              <div className="space-y-3">
+                {pendingLeaves.map((req: any) => (
+                  <div key={req.id} className="flex items-center justify-between rounded-lg border border-border/50 bg-background/50 p-3">
+                    <div>
+                      <p className="text-sm font-medium">{req.employees?.first_name} {req.employees?.last_name}</p>
+                      <p className="text-xs text-muted-foreground">{req.start_date} — {req.end_date} · {req.total_days} days</p>
+                    </div>
+                    <Badge variant="outline" className="border-warning text-warning">Pending</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="border-b border-border/50 pb-4">
+            <CardTitle className="flex items-center gap-2"><Cake className="w-4 h-4" /> Upcoming Birthdays</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {birthdays.length === 0 ? (
+              <div className="flex flex-col items-center gap-2 py-6"><Cake className="h-8 w-8 text-muted-foreground/30" /><p className="text-sm text-muted-foreground">No upcoming birthdays</p></div>
+            ) : (
+              <div className="space-y-3">
+                {birthdays.map((emp: any) => {
+                  const dob = new Date(emp.date_of_birth);
+                  const now = new Date();
+                  const bday = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
+                  const daysUntil = Math.ceil((bday.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  return (
+                    <div key={emp.id} className="flex items-center gap-3 p-2 rounded bg-background/50 border border-border/50">
+                      <div className="w-8 h-8 rounded-full bg-success/10 flex items-center justify-center text-success"><Cake className="w-4 h-4" /></div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{emp.first_name} {emp.last_name}</p>
+                        <p className="text-xs text-muted-foreground">{dob.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                      </div>
+                      <Badge variant="outline" className={`text-[10px] ${daysUntil === 0 ? 'border-success text-success bg-success/10' : 'border-muted text-muted-foreground'}`}>
+                        {daysUntil === 0 ? 'Today! 🎉' : `${daysUntil}d`}
+                      </Badge>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-4">
+        <Button variant="outline" className="justify-start gap-2" onClick={() => navigate('/employees')}><Users className="h-4 w-4" /> Manage Employees</Button>
+        <Button variant="outline" className="justify-start gap-2" onClick={() => navigate('/attendance')}><Clock className="h-4 w-4" /> Attendance</Button>
+        <Button variant="outline" className="justify-start gap-2" onClick={() => navigate('/payroll')}><DollarSign className="h-4 w-4" /> Payroll</Button>
+        <Button variant="outline" className="justify-start gap-2" onClick={() => navigate('/helpdesk')}><MessageSquare className="h-4 w-4" /> Help Desk</Button>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { profile } = useAuthStore();
 
   if (profile?.platform_role === 'super_admin') return <SuperAdminDashboard />;
   if (profile?.platform_role === 'company_admin') return <CompanyAdminDashboard />;
+  if (profile?.platform_role === 'hr_manager') return <HRManagerDashboard />;
+  // recruiter and user both get employee dashboard
   return <EmployeeDashboard />;
 }

@@ -1,24 +1,28 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Clock, MapPin, Play, Square, Coffee } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Clock, MapPin, Play, Square, Coffee, Building, Home, Globe, AlertTriangle } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthStore } from '@/store/auth-store';
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
+const LATE_THRESHOLD_HOUR = 9; // 9 AM
+const LATE_THRESHOLD_MIN = 15; // 9:15 AM grace period
+
 export default function Attendance() {
   const { profile } = useAuthStore();
   const queryClient = useQueryClient();
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [workType, setWorkType] = useState<'office' | 'remote' | 'hybrid'>('office');
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Get the employee record for the current user
   const { data: employee } = useQuery({
     queryKey: ['my-employee', profile?.id],
     queryFn: async () => {
@@ -34,7 +38,6 @@ export default function Attendance() {
     enabled: !!profile?.id,
   });
 
-  // Get today's attendance record for clock-in state tracking
   const today = new Date().toISOString().split('T')[0];
   const { data: todayRecord } = useQuery({
     queryKey: ['attendance-today', employee?.id, today],
@@ -50,7 +53,6 @@ export default function Attendance() {
     enabled: !!employee?.id,
   });
 
-  // Get recent attendance logs (scoped by company)
   const { data: attendanceData = [], isLoading } = useQuery({
     queryKey: ['attendance', employee?.company_id],
     queryFn: async () => {
@@ -59,37 +61,40 @@ export default function Attendance() {
         .select(`*, employees (first_name, last_name)`)
         .eq('company_id', employee!.company_id)
         .order('date', { ascending: false })
-        .limit(10);
+        .limit(20);
       return data || [];
     },
     enabled: !!employee?.company_id,
   });
 
-  // Clock In mutation
   const clockInMutation = useMutation({
     mutationFn: async () => {
       if (!employee) throw new Error('Employee record not found');
       if (todayRecord?.clock_in) throw new Error('Already clocked in today');
+      const clockInTime = new Date();
+      const isLate = clockInTime.getHours() > LATE_THRESHOLD_HOUR ||
+        (clockInTime.getHours() === LATE_THRESHOLD_HOUR && clockInTime.getMinutes() > LATE_THRESHOLD_MIN);
       const { error } = await supabase
         .from('attendance')
         .insert([{
           employee_id: employee.id,
           company_id: employee.company_id,
           date: today,
-          clock_in: new Date().toISOString(),
-          status: 'present' as any,
+          clock_in: clockInTime.toISOString(),
+          status: (isLate ? 'late' : 'present') as any,
+          clock_in_location: { work_type: workType },
         }]);
       if (error) throw error;
+      if (isLate) toast.warning('You clocked in late today');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attendance-today'] });
       queryClient.invalidateQueries({ queryKey: ['attendance'] });
-      toast.success('Clocked in successfully');
+      toast.success(`Clocked in (${workType})`);
     },
     onError: (err: any) => toast.error(err?.message || 'Failed to clock in'),
   });
 
-  // Clock Out mutation
   const clockOutMutation = useMutation({
     mutationFn: async () => {
       if (!todayRecord?.id) throw new Error('No clock-in record found for today');
@@ -97,14 +102,17 @@ export default function Attendance() {
       const clockOut = new Date();
       const clockIn = new Date(todayRecord.clock_in);
       const totalHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60);
+      const isEarlyLeave = clockOut.getHours() < 17; // before 5 PM
       const { error } = await supabase
         .from('attendance')
         .update({
           clock_out: clockOut.toISOString(),
           total_hours: parseFloat(totalHours.toFixed(2)),
+          status: (isEarlyLeave && todayRecord.status !== 'late' ? 'early_leave' : todayRecord.status) as any,
         })
         .eq('id', todayRecord.id);
       if (error) throw error;
+      if (isEarlyLeave) toast.info('Early leave recorded');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attendance-today'] });
@@ -114,7 +122,6 @@ export default function Attendance() {
     onError: (err: any) => toast.error(err?.message || 'Failed to clock out'),
   });
 
-  // Break mutation
   const breakMutation = useMutation({
     mutationFn: async () => {
       if (!todayRecord?.id) throw new Error('No clock-in record found for today');
@@ -136,7 +143,6 @@ export default function Attendance() {
   const isClockedIn = !!todayRecord?.clock_in && !todayRecord?.clock_out;
   const isClockedOut = !!todayRecord?.clock_out;
 
-  // Calculate running total time
   let runningTotal = '00:00:00';
   if (todayRecord?.clock_in) {
     const start = new Date(todayRecord.clock_in);
@@ -147,6 +153,22 @@ export default function Attendance() {
     const s = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
     runningTotal = `${h}:${m}:${s}`;
   }
+
+  const getWorkTypeFromRecord = (record: any) => {
+    const loc = record.clock_in_location;
+    if (loc && typeof loc === 'object' && 'work_type' in loc) return loc.work_type;
+    return null;
+  };
+
+  const workTypeIcons: Record<string, any> = { office: Building, remote: Home, hybrid: Globe };
+  const todayWorkType = todayRecord ? getWorkTypeFromRecord(todayRecord) : null;
+  const statusColors: Record<string, string> = {
+    present: 'border-success text-success bg-success/10',
+    late: 'border-warning text-warning bg-warning/10',
+    early_leave: 'border-info text-info bg-info/10',
+    absent: 'border-destructive text-destructive bg-destructive/10',
+    half_day: 'border-orange-500 text-orange-500 bg-orange-500/10',
+  };
 
   return (
     <div className="space-y-6">
@@ -174,6 +196,39 @@ export default function Attendance() {
                 {currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
               </p>
             </div>
+
+            {/* Work Type Selector — only before clock-in */}
+            {!todayRecord?.clock_in && (
+              <div className="flex justify-center gap-2">
+                {(['office', 'remote', 'hybrid'] as const).map(type => {
+                  const Icon = workTypeIcons[type];
+                  return (
+                    <Button
+                      key={type}
+                      variant={workType === type ? 'default' : 'outline'}
+                      size="sm"
+                      className="gap-2 capitalize"
+                      onClick={() => setWorkType(type)}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {type}
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Show work type after clock-in */}
+            {todayWorkType && (
+              <div className="flex justify-center">
+                <Badge variant="outline" className="gap-1 capitalize border-primary/30 text-primary">
+                  {todayWorkType === 'office' && <Building className="w-3 h-3" />}
+                  {todayWorkType === 'remote' && <Home className="w-3 h-3" />}
+                  {todayWorkType === 'hybrid' && <Globe className="w-3 h-3" />}
+                  {todayWorkType}
+                </Badge>
+              </div>
+            )}
 
             <div className="flex justify-center gap-4">
               <Button
@@ -208,6 +263,11 @@ export default function Attendance() {
               <div className="flex items-center gap-2 text-muted-foreground">
                 <MapPin className="w-4 h-4" />
                 <span>{isClockedIn ? 'Active Session' : isClockedOut ? 'Session Complete' : 'Not Clocked In'}</span>
+                {todayRecord?.status === 'late' && (
+                  <Badge variant="outline" className="border-warning text-warning bg-warning/10 text-[10px] gap-1">
+                    <AlertTriangle className="w-3 h-3" /> Late
+                  </Badge>
+                )}
               </div>
               <div className="font-medium text-foreground">Total: <span className="text-primary">{runningTotal}</span></div>
             </div>
@@ -229,6 +289,10 @@ export default function Attendance() {
                 <span className="font-medium">{todayRecord?.clock_out ? new Date(todayRecord.clock_out).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</span>
               </div>
               <div className="flex justify-between items-center p-2 rounded border border-border/50 bg-background/50">
+                <span className="text-muted-foreground">Work Type</span>
+                <span className="font-medium capitalize">{todayWorkType || '—'}</span>
+              </div>
+              <div className="flex justify-between items-center p-2 rounded border border-border/50 bg-background/50">
                 <span className="text-muted-foreground">Break</span>
                 <span className="font-medium">{todayRecord?.break_minutes || 0} min</span>
               </div>
@@ -238,8 +302,8 @@ export default function Attendance() {
               </div>
               <div className="flex justify-between items-center p-2 rounded border border-border/50 bg-background/50">
                 <span className="text-muted-foreground">Status</span>
-                <Badge variant="outline" className={`${isClockedIn ? 'border-success text-success bg-success/10' : isClockedOut ? 'border-info text-info bg-info/10' : 'border-muted text-muted-foreground'}`}>
-                  {isClockedIn ? 'Active' : isClockedOut ? 'Completed' : 'Pending'}
+                <Badge variant="outline" className={statusColors[todayRecord?.status || ''] || 'border-muted text-muted-foreground'}>
+                  {todayRecord?.status === 'late' ? '⚠ Late' : isClockedIn ? 'Active' : isClockedOut ? 'Completed' : 'Pending'}
                 </Badge>
               </div>
             </div>
@@ -256,13 +320,33 @@ export default function Attendance() {
                 <p className="text-muted-foreground py-4 text-center">No recent records found.</p>
             ) : (
                 <div className="divide-y divide-border/50">
-                  {attendanceData.map((record: any) => (
+                  {attendanceData.map((record: any) => {
+                    const wt = getWorkTypeFromRecord(record);
+                    return (
                     <div key={record.id} className="py-3 flex justify-between items-center text-sm hover:bg-muted/30 p-2 rounded-lg transition-colors">
-                      <div>
-                        <div className="font-semibold text-foreground">
-                          {(record.employees as any)?.first_name} {(record.employees as any)?.last_name}
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <div className="font-semibold text-foreground">
+                            {(record.employees as any)?.first_name} {(record.employees as any)?.last_name}
+                          </div>
+                          <div className="text-muted-foreground text-xs flex items-center gap-2">
+                            {record.date}
+                            {wt && (
+                              <Badge variant="outline" className="text-[9px] capitalize gap-1">
+                                {wt === 'remote' && <Home className="w-2.5 h-2.5" />}
+                                {wt === 'office' && <Building className="w-2.5 h-2.5" />}
+                                {wt === 'hybrid' && <Globe className="w-2.5 h-2.5" />}
+                                {wt}
+                              </Badge>
+                            )}
+                            {record.status === 'late' && (
+                              <Badge variant="outline" className="text-[9px] border-warning text-warning bg-warning/10">Late</Badge>
+                            )}
+                            {record.status === 'early_leave' && (
+                              <Badge variant="outline" className="text-[9px] border-info text-info bg-info/10">Early</Badge>
+                            )}
+                          </div>
                         </div>
-                        <div className="text-muted-foreground text-xs">{record.date}</div>
                       </div>
                       <div className="flex gap-4 text-right">
                         <div>
@@ -279,7 +363,8 @@ export default function Attendance() {
                         </div>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
             )}
         </CardContent>

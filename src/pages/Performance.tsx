@@ -1,31 +1,65 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Target, TrendingUp, Award, Zap } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { Slider } from '@/components/ui/slider';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Target, TrendingUp, Award, Zap, Plus, Pencil, Star, MessageSquare } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthStore } from '@/store/auth-store';
+import { useState } from 'react';
+import { toast } from 'sonner';
+
+interface GoalForm {
+  title: string;
+  description: string;
+  due_date: string;
+  type: string;
+}
+const emptyGoalForm: GoalForm = { title: '', description: '', due_date: '', type: 'individual' };
 
 export default function Performance() {
   const { profile } = useAuthStore();
+  const queryClient = useQueryClient();
+  const isAdmin = profile?.platform_role === 'company_admin' || profile?.platform_role === 'hr_manager' || profile?.platform_role === 'super_admin';
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [cycleDialogOpen, setCycleDialogOpen] = useState(false);
+  const [form, setForm] = useState<GoalForm>(emptyGoalForm);
+  const [updatingGoal, setUpdatingGoal] = useState<string | null>(null);
+  const [feedbackGoal, setFeedbackGoal] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Record<string, { rating: number; comment: string }>>({});
+  const [cycleForm, setCycleForm] = useState({ name: '', start_date: '', end_date: '', type: 'quarterly' });
+
+  const { data: employee } = useQuery({
+    queryKey: ['my-employee', profile?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('employees').select('id, company_id').eq('user_id', profile!.id).is('deleted_at', null).maybeSingle();
+      return data;
+    },
+    enabled: !!profile?.id,
+  });
 
   const { data: goals = [], isLoading: loadingGoals } = useQuery({
     queryKey: ['goals', profile?.company_id],
     queryFn: async () => {
       const { data } = await supabase
         .from('goals')
-        .select('*')
+        .select('*, employees(first_name, last_name)')
         .eq('company_id', profile!.company_id!)
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(30);
       return data || [];
     },
     enabled: !!profile?.company_id,
   });
 
-  const { data: reviewCycles = [], isLoading: loadingCycles } = useQuery({
+  const { data: reviewCycles = [] } = useQuery({
     queryKey: ['review-cycles', profile?.company_id],
     queryFn: async () => {
       const { data } = await supabase
@@ -39,12 +73,78 @@ export default function Performance() {
     enabled: !!profile?.company_id,
   });
 
-  const activeGoals = goals.filter((g: any) => g.status === 'active');
+  const createGoalMutation = useMutation({
+    mutationFn: async (f: GoalForm) => {
+      if (!employee) throw new Error('Employee record not found');
+      const { error } = await supabase.from('goals').insert([{
+        company_id: profile!.company_id!,
+        employee_id: employee.id,
+        title: f.title,
+        description: f.description,
+        due_date: f.due_date || null,
+        type: f.type,
+        created_by: profile!.id,
+      }]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      toast.success('Objective created');
+      setDialogOpen(false);
+      setForm(emptyGoalForm);
+    },
+    onError: (err: any) => toast.error(err?.message || 'Failed to create'),
+  });
+
+  const updateProgressMutation = useMutation({
+    mutationFn: async ({ id, progress }: { id: string; progress: number }) => {
+      const status = progress >= 100 ? 'completed' : progress >= 70 ? 'on_track' : 'active';
+      const { error } = await supabase.from('goals').update({ progress, status: status as any }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      setUpdatingGoal(null);
+      toast.success('Progress updated');
+    },
+  });
+
+  const createCycleMutation = useMutation({
+    mutationFn: async () => {
+      if (!cycleForm.name.trim()) throw new Error('Name is required');
+      const { error } = await supabase.from('review_cycles').insert([{
+        company_id: profile!.company_id!,
+        name: cycleForm.name,
+        start_date: cycleForm.start_date,
+        end_date: cycleForm.end_date,
+        type: cycleForm.type,
+        status: 'active',
+      }]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['review-cycles'] });
+      toast.success('Review cycle created');
+      setCycleDialogOpen(false);
+      setCycleForm({ name: '', start_date: '', end_date: '', type: 'quarterly' });
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to create cycle'),
+  });
+
+  const saveFeedback = (goalId: string) => {
+    const fb = feedback[goalId];
+    if (!fb || !fb.comment.trim()) { toast.error('Please add feedback text'); return; }
+    toast.success('Feedback saved');
+    setFeedbackGoal(null);
+  };
+
+  const activeGoals = goals.filter((g: any) => g.status === 'active' || g.status === 'on_track' || g.status === 'at_risk');
   const completedGoals = goals.filter((g: any) => g.status === 'completed');
   const avgProgress = goals.length > 0 ? Math.round(goals.reduce((s: number, g: any) => s + (g.progress || 0), 0) / goals.length) : 0;
 
   const statusColor: Record<string, string> = {
     active: 'border-success text-success bg-success/10',
+    on_track: 'border-success text-success bg-success/10',
     at_risk: 'border-warning text-warning bg-warning/10',
     completed: 'border-info text-info bg-info/10',
     missed: 'border-destructive text-destructive bg-destructive/10',
@@ -57,9 +157,84 @@ export default function Performance() {
           <h1 className="text-3xl font-bold tracking-tight">Performance & Goals</h1>
           <p className="text-muted-foreground mt-1">OKR tracking & appraisal cycles</p>
         </div>
-        <Button className="gap-2">
-          <Target className="h-4 w-4" /> New Objective
-        </Button>
+        <div className="flex gap-2">
+          {isAdmin && (
+            <Dialog open={cycleDialogOpen} onOpenChange={setCycleDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="gap-2"><Zap className="h-4 w-4" /> New Review Cycle</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Create Review Cycle</DialogTitle>
+                  <DialogDescription>Set up a performance review period</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>Cycle Name</Label>
+                    <Input placeholder="e.g., Q1 2026 Review" value={cycleForm.name} onChange={(e) => setCycleForm(f => ({ ...f, name: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Type</Label>
+                    <Select value={cycleForm.type} onValueChange={(v) => setCycleForm(f => ({ ...f, type: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="quarterly">Quarterly</SelectItem>
+                        <SelectItem value="half_yearly">Half-Yearly</SelectItem>
+                        <SelectItem value="annual">Annual</SelectItem>
+                        <SelectItem value="360_degree">360° Review</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Start Date</Label>
+                      <Input type="date" value={cycleForm.start_date} onChange={(e) => setCycleForm(f => ({ ...f, start_date: e.target.value }))} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>End Date</Label>
+                      <Input type="date" value={cycleForm.end_date} onChange={(e) => setCycleForm(f => ({ ...f, end_date: e.target.value }))} />
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setCycleDialogOpen(false)}>Cancel</Button>
+                  <Button onClick={() => createCycleMutation.mutate()} disabled={createCycleMutation.isPending}>Create Cycle</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2"><Plus className="h-4 w-4" /> New Objective</Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Create New Objective</DialogTitle>
+                <DialogDescription>Define a goal with measurable key results</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Objective Title</Label>
+                  <Input placeholder="e.g., Increase customer satisfaction" value={form.title} onChange={(e) => setForm(f => ({ ...f, title: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Description</Label>
+                  <Textarea placeholder="Describe the objective and key results..." rows={3} value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Due Date</Label>
+                  <Input type="date" value={form.due_date} onChange={(e) => setForm(f => ({ ...f, due_date: e.target.value }))} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                <Button onClick={() => { if (!form.title.trim()) { toast.error('Title is required'); return; } createGoalMutation.mutate(form); }} disabled={createGoalMutation.isPending}>
+                  {createGoalMutation.isPending ? 'Creating...' : 'Create Objective'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -85,6 +260,33 @@ export default function Performance() {
         </CardContent></Card>
       </div>
 
+      {/* Review Cycles */}
+      {reviewCycles.length > 0 && (
+        <Card>
+          <CardHeader className="border-b border-border/50 pb-4">
+            <CardTitle className="text-base flex items-center gap-2"><Zap className="w-4 h-4" /> Active Review Cycles</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="space-y-2">
+              {reviewCycles.map((cycle: any) => (
+                <div key={cycle.id} className="flex items-center justify-between p-3 rounded border border-border/50 bg-background/50">
+                  <div>
+                    <p className="font-medium text-sm">{cycle.name}</p>
+                    <p className="text-xs text-muted-foreground">{cycle.start_date} → {cycle.end_date}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="capitalize text-[10px]">{cycle.type?.replace('_', ' ')}</Badge>
+                    <Badge variant="outline" className={cycle.status === 'active' ? 'border-success text-success bg-success/10' : 'border-muted text-muted-foreground'}>
+                      {cycle.status}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="overflow-hidden">
         <CardHeader>
           <CardTitle>Current Objectives</CardTitle>
@@ -97,21 +299,76 @@ export default function Performance() {
             <div className="flex flex-col items-center gap-2 py-8">
               <Target className="h-10 w-10 text-muted-foreground/30" />
               <p className="text-sm text-muted-foreground">No goals created yet</p>
-              <Button variant="outline" size="sm">Create Your First Goal</Button>
+              <Button variant="outline" size="sm" onClick={() => setDialogOpen(true)}>Create Your First Goal</Button>
             </div>
           ) : (
             goals.map((goal: any) => (
-              <div key={goal.id} className="space-y-2">
+              <div key={goal.id} className="space-y-2 p-3 rounded-lg border border-border/50 bg-background/30 hover:bg-background/60 transition-colors">
                 <div className="flex justify-between items-center">
-                  <div className="font-medium">{goal.title}</div>
-                  <Badge variant="outline" className={statusColor[goal.status] || ''}>
-                    {goal.status?.replace('_', ' ')}
-                  </Badge>
+                  <div>
+                    <div className="font-medium">{goal.title}</div>
+                    {goal.employees && (
+                      <span className="text-xs text-muted-foreground">{goal.employees.first_name} {goal.employees.last_name}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className={statusColor[goal.status] || ''}>
+                      {goal.status?.replace('_', ' ')}
+                    </Badge>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setUpdatingGoal(updatingGoal === goal.id ? null : goal.id)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    {isAdmin && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setFeedbackGoal(feedbackGoal === goal.id ? null : goal.id)}>
+                        <MessageSquare className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <Progress value={goal.progress || 0} className="h-2" />
                   <span className="text-sm text-muted-foreground w-12 text-right">{goal.progress || 0}%</span>
                 </div>
+                {updatingGoal === goal.id && (
+                  <div className="flex items-center gap-4 pt-2 border-t border-border/30">
+                    <span className="text-xs text-muted-foreground w-20">Update:</span>
+                    <Slider
+                      defaultValue={[goal.progress || 0]}
+                      max={100}
+                      step={5}
+                      className="flex-1"
+                      onValueCommit={(value) => updateProgressMutation.mutate({ id: goal.id, progress: value[0] })}
+                    />
+                  </div>
+                )}
+                {/* Manager Feedback Section */}
+                {feedbackGoal === goal.id && isAdmin && (
+                  <div className="pt-3 mt-2 border-t border-border/30 space-y-3">
+                    <h5 className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1">
+                      <MessageSquare className="w-3 h-3" /> Manager Feedback
+                    </h5>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <button
+                          key={star}
+                          onClick={() => setFeedback(prev => ({ ...prev, [goal.id]: { ...prev[goal.id], rating: star, comment: prev[goal.id]?.comment || '' } }))}
+                          className="focus:outline-none"
+                        >
+                          <Star className={`w-5 h-5 transition-colors ${(feedback[goal.id]?.rating || 0) >= star ? 'text-yellow-500 fill-yellow-500' : 'text-muted-foreground/30'}`} />
+                        </button>
+                      ))}
+                      <span className="text-xs text-muted-foreground ml-2 self-center">{feedback[goal.id]?.rating || 0}/5</span>
+                    </div>
+                    <Textarea
+                      placeholder="Add your feedback, observations, and improvement areas..."
+                      rows={2}
+                      value={feedback[goal.id]?.comment || ''}
+                      onChange={(e) => setFeedback(prev => ({ ...prev, [goal.id]: { ...prev[goal.id], rating: prev[goal.id]?.rating || 0, comment: e.target.value } }))}
+                      className="text-sm"
+                    />
+                    <Button size="sm" onClick={() => saveFeedback(goal.id)}>Save Feedback</Button>
+                  </div>
+                )}
                 {goal.due_date && (
                   <p className="text-xs text-muted-foreground">Due: {goal.due_date}</p>
                 )}

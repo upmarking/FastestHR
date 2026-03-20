@@ -2,17 +2,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Calendar, Plus, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Calendar, Plus, CheckCircle, XCircle, Clock, BarChart3, PieChart } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthStore } from '@/store/auth-store';
+import { toast } from 'sonner';
 
 export default function Leave() {
   const navigate = useNavigate();
   const { profile } = useAuthStore();
+  const queryClient = useQueryClient();
+  const isAdmin = profile?.platform_role === 'company_admin' || profile?.platform_role === 'super_admin' || profile?.platform_role === 'hr_manager';
 
-  // Get employee record for current user
   const { data: employee } = useQuery({
     queryKey: ['my-employee', profile?.id],
     queryFn: async () => {
@@ -28,7 +30,6 @@ export default function Leave() {
     enabled: !!profile?.id,
   });
 
-  // Leave balances
   const { data: leaveBalances = [], isLoading: loadingBalances } = useQuery({
     queryKey: ['leave-balances', employee?.id],
     queryFn: async () => {
@@ -42,18 +43,19 @@ export default function Leave() {
     enabled: !!employee?.id,
   });
 
-  // Leave requests - for admins show all company requests, for employees show own
   const { data: leaveRequests = [], isLoading: loadingRequests } = useQuery({
-    queryKey: ['leave-requests', profile?.platform_role, employee?.id],
+    queryKey: ['leave-requests', profile?.platform_role, employee?.id, profile?.company_id],
     queryFn: async () => {
       let query = supabase
         .from('leave_requests')
         .select('*, employees!leave_requests_employee_id_fkey(first_name, last_name), leave_types(name)')
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(30);
 
-      if (profile?.platform_role !== 'company_admin' && profile?.platform_role !== 'super_admin' && employee?.id) {
+      if (!isAdmin && employee?.id) {
         query = query.eq('employee_id', employee.id);
+      } else if (isAdmin && profile?.company_id) {
+        query = query.eq('company_id', profile.company_id);
       }
 
       const { data } = await query;
@@ -62,10 +64,45 @@ export default function Leave() {
     enabled: !!profile,
   });
 
+  const actionMutation = useMutation({
+    mutationFn: async ({ id, status, employeeId, totalDays, leaveTypeId }: { id: string; status: 'approved' | 'rejected'; employeeId: string; totalDays: number; leaveTypeId: string }) => {
+      const { error } = await supabase.from('leave_requests').update({
+        status: status as any,
+        approved_by: profile!.id,
+      }).eq('id', id);
+      if (error) throw error;
+
+      // If approved, update leave balance
+      if (status === 'approved') {
+        const { data: balance } = await supabase
+          .from('leave_balances')
+          .select('id, used_days')
+          .eq('employee_id', employeeId)
+          .eq('leave_type_id', leaveTypeId)
+          .eq('year', new Date().getFullYear())
+          .maybeSingle();
+
+        if (balance) {
+          await supabase.from('leave_balances').update({
+            used_days: (balance.used_days || 0) + totalDays,
+          }).eq('id', balance.id);
+        }
+      }
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['leave-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['leave-balances'] });
+      queryClient.invalidateQueries({ queryKey: ['pending-leaves'] });
+      toast.success(`Leave request ${vars.status}`);
+    },
+    onError: (err: any) => toast.error(err?.message || 'Failed to update'),
+  });
+
   const statusStyle: Record<string, { class: string; Icon: any }> = {
     approved: { class: 'border-success text-success bg-success/10', Icon: CheckCircle },
     rejected: { class: 'border-destructive text-destructive bg-destructive/10', Icon: XCircle },
     pending: { class: 'border-warning text-warning bg-warning/10', Icon: Clock },
+    cancelled: { class: 'border-muted text-muted-foreground', Icon: XCircle },
   };
 
   return (
@@ -142,11 +179,48 @@ export default function Leave() {
                           {req.employees && <span className="text-muted-foreground font-normal text-sm ml-2">— {req.employees.first_name} {req.employees.last_name}</span>}
                         </h4>
                         <p className="text-sm text-muted-foreground">{req.start_date} — {req.end_date} &bull; {req.total_days} Day{(req.total_days || 0) > 1 ? 's' : ''}</p>
+                        {req.reason && <p className="text-xs text-muted-foreground/70 mt-1 italic">"{req.reason}"</p>}
                       </div>
                     </div>
-                    <Badge variant="outline" className={`uppercase tracking-wider ${s.class}`}>
-                      {req.status}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      {isAdmin && req.status === 'pending' && (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-success text-success hover:bg-success/10 h-8"
+                            disabled={actionMutation.isPending}
+                            onClick={() => actionMutation.mutate({
+                              id: req.id,
+                              status: 'approved',
+                              employeeId: req.employee_id,
+                              totalDays: req.total_days || 0,
+                              leaveTypeId: req.leave_type_id,
+                            })}
+                          >
+                            <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-destructive text-destructive hover:bg-destructive/10 h-8"
+                            disabled={actionMutation.isPending}
+                            onClick={() => actionMutation.mutate({
+                              id: req.id,
+                              status: 'rejected',
+                              employeeId: req.employee_id,
+                              totalDays: req.total_days || 0,
+                              leaveTypeId: req.leave_type_id,
+                            })}
+                          >
+                            <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
+                          </Button>
+                        </>
+                      )}
+                      <Badge variant="outline" className={`uppercase tracking-wider ${s.class}`}>
+                        {req.status}
+                      </Badge>
+                    </div>
                   </div>
                 );
               })}
@@ -154,6 +228,93 @@ export default function Leave() {
           )}
         </CardContent>
       </Card>
+
+      {/* Leave Analytics — Admin/HR only */}
+      {isAdmin && (
+        <Card>
+          <CardHeader className="border-b border-border/50 pb-4">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BarChart3 className="w-4 h-4" /> Leave Analytics
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {leaveRequests.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No leave data to analyze</p>
+            ) : (
+              <div className="space-y-6">
+                {/* Leave Type Distribution */}
+                <div>
+                  <h4 className="text-sm font-medium mb-3 flex items-center gap-1"><PieChart className="w-3.5 h-3.5" /> By Leave Type</h4>
+                  <div className="space-y-2">
+                    {(() => {
+                      const typeCounts: Record<string, number> = {};
+                      leaveRequests.forEach((r: any) => {
+                        const name = r.leave_types?.name || 'Other';
+                        typeCounts[name] = (typeCounts[name] || 0) + 1;
+                      });
+                      const total = leaveRequests.length;
+                      const colors = ['bg-primary', 'bg-info', 'bg-warning', 'bg-success', 'bg-destructive'];
+                      return Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).map(([name, count], i) => {
+                        const pct = Math.round((count / total) * 100);
+                        return (
+                          <div key={name} className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span>{name}</span>
+                              <span className="text-muted-foreground">{count} ({pct}%)</span>
+                            </div>
+                            <div className="h-1.5 w-full rounded-full bg-muted/30">
+                              <div className={`h-full rounded-full ${colors[i % colors.length]} transition-all`} style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+
+                {/* Status Breakdown */}
+                <div>
+                  <h4 className="text-sm font-medium mb-3">By Status</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { label: 'Approved', count: leaveRequests.filter((r: any) => r.status === 'approved').length, color: 'text-success bg-success/10 border-success/30' },
+                      { label: 'Pending', count: leaveRequests.filter((r: any) => r.status === 'pending').length, color: 'text-warning bg-warning/10 border-warning/30' },
+                      { label: 'Rejected', count: leaveRequests.filter((r: any) => r.status === 'rejected').length, color: 'text-destructive bg-destructive/10 border-destructive/30' },
+                    ].map(item => (
+                      <div key={item.label} className={`text-center p-3 rounded border ${item.color}`}>
+                        <p className="text-xs">{item.label}</p>
+                        <p className="text-xl font-bold">{item.count}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Top Leave Takers */}
+                <div>
+                  <h4 className="text-sm font-medium mb-3">Top Leave Takers</h4>
+                  <div className="space-y-2">
+                    {(() => {
+                      const empCounts: Record<string, { name: string; days: number }> = {};
+                      leaveRequests.filter((r: any) => r.status === 'approved').forEach((r: any) => {
+                        const key = r.employee_id;
+                        const name = r.employees ? `${r.employees.first_name} ${r.employees.last_name}` : 'Unknown';
+                        if (!empCounts[key]) empCounts[key] = { name, days: 0 };
+                        empCounts[key].days += r.total_days || 0;
+                      });
+                      return Object.values(empCounts).sort((a, b) => b.days - a.days).slice(0, 5).map((emp, i) => (
+                        <div key={i} className="flex items-center justify-between text-sm p-2 rounded border border-border/50 bg-background/50">
+                          <span>{emp.name}</span>
+                          <Badge variant="outline">{emp.days} days</Badge>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

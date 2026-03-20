@@ -1,6 +1,7 @@
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { AppSidebar } from './AppSidebar';
 import { Topbar } from './Topbar';
+import { AIAssistant } from '@/components/AIAssistant';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -16,6 +17,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <main className="flex-1 p-6">{children}</main>
         </div>
       </div>
+      <AIAssistant />
     </SidebarProvider>
   );
 }
