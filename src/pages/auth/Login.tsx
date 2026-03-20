@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { AuthLayout } from '@/components/layout/AuthLayout';
+import { EmailVerificationPending } from '@/components/auth/EmailVerificationPending';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -23,6 +24,7 @@ export default function Login() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -37,6 +39,10 @@ export default function Login() {
       });
 
       if (error) {
+        if (error.message.includes('Email not confirmed')) {
+          setUnverifiedEmail(data.email);
+          return;
+        }
         if (error.message.includes('Invalid login')) {
           toast.error('Invalid email or password');
         } else {
@@ -53,6 +59,17 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  if (unverifiedEmail) {
+    return (
+      <AuthLayout title="Email not verified" subtitle="Please verify your email to continue">
+        <EmailVerificationPending
+          email={unverifiedEmail}
+          onBackToLogin={() => setUnverifiedEmail(null)}
+        />
+      </AuthLayout>
+    );
+  }
 
   return (
     <AuthLayout title="Welcome back" subtitle="Sign in to your FastestHR account">
