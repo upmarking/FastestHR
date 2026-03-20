@@ -87,7 +87,7 @@ export function EmailVerificationPending({ email, onBackToLogin }: EmailVerifica
           {sending ? (
             <RefreshCw className="h-4 w-4 animate-spin" />
           ) : sent ? (
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+            <CheckCircle2 className="h-4 w-4 text-success" />
           ) : (
             <RefreshCw className="h-4 w-4" />
           )}
