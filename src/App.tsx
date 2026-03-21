@@ -30,7 +30,6 @@ import OfferView from '@/pages/recruitment/OfferView';
 import Documents from '@/pages/Documents';
 import Onboarding from '@/pages/Onboarding';
 import ExitManagement from '@/pages/ExitManagement';
-import OrgChart from '@/pages/OrgChart';
 import HolidayCalendar from '@/pages/HolidayCalendar';
 
 
@@ -109,7 +108,6 @@ function AppRoutes() {
       <Route path="/documents" element={withLayout(<Documents />)} />
       <Route path="/onboarding" element={withLayout(<Onboarding />)} />
       <Route path="/exit-management" element={withLayout(<ExitManagement />)} />
-      <Route path="/org-chart" element={withLayout(<OrgChart />)} />
       <Route path="/holidays" element={withLayout(<HolidayCalendar />)} />
       <Route path="/settings/*" element={withLayout(<Settings />)} />
 

@@ -5,18 +5,19 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Users, Plus, Search, Grid3X3, List } from 'lucide-react';
+import { Users, Plus, Search, Grid3X3, List, Network } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthStore } from '@/store/auth-store';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
+import { EmployeeOrgChart } from '@/components/employees/EmployeeOrgChart';
 
 export default function Employees() {
   const navigate = useNavigate();
   const { profile } = useAuthStore();
   const [search, setSearch] = useState('');
-  const [view, setView] = useState<'grid' | 'list'>('grid');
+  const [view, setView] = useState<'grid' | 'list' | 'org'>('grid');
 
   const { data: employees = [], isLoading } = useQuery({
     queryKey: ['employees', search, profile?.company_id],
@@ -25,8 +26,13 @@ export default function Employees() {
         .from('employees')
         .select('*, departments(name), designations(title)')
         .eq('company_id', profile!.company_id!)
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
+        .is('deleted_at', null);
+
+      if (view !== 'org') {
+        query = query.order('created_at', { ascending: false });
+      } else {
+        query = query.order('first_name');
+      }
 
       if (search) {
         query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,work_email.ilike.%${search}%`);
@@ -69,11 +75,14 @@ export default function Employees() {
           />
         </div>
         <div className="flex rounded-md border border-border/50 bg-background/50 p-1 backdrop-blur-sm">
-          <Button variant={view === 'grid' ? 'secondary' : 'ghost'} size="icon" onClick={() => setView('grid')}>
+          <Button variant={view === 'grid' ? 'secondary' : 'ghost'} size="icon" onClick={() => setView('grid')} title="Grid View">
             <Grid3X3 className="h-4 w-4" />
           </Button>
-          <Button variant={view === 'list' ? 'secondary' : 'ghost'} size="icon" onClick={() => setView('list')}>
+          <Button variant={view === 'list' ? 'secondary' : 'ghost'} size="icon" onClick={() => setView('list')} title="List View">
             <List className="h-4 w-4" />
+          </Button>
+          <Button variant={view === 'org' ? 'secondary' : 'ghost'} size="icon" onClick={() => setView('org')} title="Hierarchy View">
+            <Network className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -125,7 +134,7 @@ export default function Employees() {
             </Card>
           ))}
         </div>
-      ) : (
+      ) : view === 'list' ? (
         <Card className="overflow-hidden">
           <div className="divide-y divide-border/50">
             {employees.map((emp: any) => (
@@ -145,6 +154,12 @@ export default function Employees() {
                 </Badge>
               </div>
             ))}
+          </div>
+        </Card>
+      ) : (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <EmployeeOrgChart employees={employees} />
           </div>
         </Card>
       )}

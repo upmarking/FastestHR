@@ -8,25 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { UserMinus, ClipboardCheck, DollarSign, MessageSquare, Package, Plus, AlertTriangle } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { UserMinus, ClipboardCheck, DollarSign, MessageSquare, Package, Plus, AlertTriangle, Loader2 } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthStore } from '@/store/auth-store';
 import { useState } from 'react';
 import { toast } from 'sonner';
-
-interface ExitRecord {
-  id: string;
-  employeeName: string;
-  department: string;
-  resignationDate: string;
-  lastWorkingDay: string;
-  reason: string;
-  status: 'initiated' | 'in_progress' | 'completed';
-  exitInterview: boolean;
-  assetsReturned: boolean;
-  settlementDone: boolean;
-}
 
 const assetChecklist = [
   'Laptop / Desktop',
@@ -42,41 +29,153 @@ const assetChecklist = [
 export default function ExitManagement() {
   const { profile } = useAuthStore();
   const isAdmin = profile?.platform_role === 'company_admin' || profile?.platform_role === 'super_admin';
-
-  const [exits, setExits] = useState<ExitRecord[]>([
-    { id: '1', employeeName: 'John Smith', department: 'Engineering', resignationDate: '2026-03-01', lastWorkingDay: '2026-03-31', reason: 'Better opportunity', status: 'in_progress', exitInterview: true, assetsReturned: false, settlementDone: false },
-    { id: '2', employeeName: 'Sarah Johnson', department: 'Marketing', resignationDate: '2026-02-15', lastWorkingDay: '2026-03-15', reason: 'Personal reasons', status: 'completed', exitInterview: true, assetsReturned: true, settlementDone: true },
-  ]);
+  const queryClient = useQueryClient();
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ employeeName: '', department: '', resignationDate: '', lastWorkingDay: '', reason: '' });
+  const [form, setForm] = useState({ employee_id: '', resignation_date: '', last_working_day: '', reason: '' });
   const [selectedExit, setSelectedExit] = useState<string | null>(null);
-  const [assetState, setAssetState] = useState<Record<string, boolean[]>>({});
+  const [interviewAnswers, setInterviewAnswers] = useState<string[]>(['', '', '', '']);
 
-  const getAssetChecks = (exitId: string) => assetState[exitId] || assetChecklist.map(() => false);
-  const toggleAsset = (exitId: string, idx: number) => {
-    setAssetState(prev => {
-      const current = prev[exitId] || assetChecklist.map(() => false);
-      const updated = [...current];
-      updated[idx] = !updated[idx];
-      return { ...prev, [exitId]: updated };
+  // Fetch Exits
+  const { data: exits = [], isLoading: isLoadingExits } = useQuery({
+    queryKey: ['exits', profile?.company_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('employee_exits')
+        .select(`
+          *,
+          employees (id, first_name, last_name, employee_code, departments(name))
+        `)
+        .eq('company_id', profile!.company_id!)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!profile?.company_id,
+  });
+
+  // Fetch Active Employees for new exit dropdown
+  const { data: activeEmployees = [] } = useQuery({
+    queryKey: ['activeEmployees', profile?.company_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name, employee_code, departments(name)')
+        .eq('company_id', profile!.company_id!)
+        .neq('status', 'terminated')
+        .neq('status', 'resigned')
+        .is('deleted_at', null)
+        .order('first_name', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!profile?.company_id && dialogOpen,
+  });
+
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      if (!form.employee_id) throw new Error('Please select an employee');
+      if (!form.resignation_date) throw new Error('Resignation date is required');
+      if (!form.last_working_day) throw new Error('Last working day is required');
+
+      const { data, error } = await supabase
+        .from('employee_exits')
+        .insert({
+          company_id: profile!.company_id!,
+          employee_id: form.employee_id,
+          resignation_date: form.resignation_date,
+          last_working_day: form.last_working_day,
+          reason: form.reason || null,
+          status: 'initiated',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Update employee status to resigned
+      await supabase
+        .from('employees')
+        .update({ status: 'resigned' })
+        .eq('id', form.employee_id);
+
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['exits'] });
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['activeEmployees'] });
+      toast.success('Exit process initiated successfully');
+      setDialogOpen(false);
+      setForm({ employee_id: '', resignation_date: '', last_working_day: '', reason: '' });
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || 'Failed to initiate exit');
+    }
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string, updates: any }) => {
+      const { data, error } = await supabase
+        .from('employee_exits')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['exits'] });
+      toast.success('Exit record updated');
+    },
+    onError: (err: any) => toast.error(err?.message || 'Failed to update record')
+  });
+
+  const handleCreate = () => {
+    createMutation.mutate();
+  };
+
+  const getAssetChecks = (exitRecord: any) => {
+    if (exitRecord.assets_checklist && Array.isArray(exitRecord.assets_checklist) && exitRecord.assets_checklist.length > 0) {
+      return exitRecord.assets_checklist;
+    }
+    return assetChecklist.map(() => false);
+  };
+
+  const toggleAsset = (exitId: string, idx: number, currentList: boolean[]) => {
+    const updated = [...currentList];
+    updated[idx] = !updated[idx];
+    const allReturned = updated.every(Boolean);
+    updateMutation.mutate({ 
+      id: exitId, 
+      updates: { 
+        assets_checklist: updated,
+        assets_returned: allReturned
+      } 
     });
   };
 
-  const handleCreate = () => {
-    if (!form.employeeName.trim()) { toast.error('Employee name is required'); return; }
-    const newExit: ExitRecord = {
-      id: Date.now().toString(),
-      ...form,
-      status: 'initiated',
-      exitInterview: false,
-      assetsReturned: false,
-      settlementDone: false,
-    };
-    setExits(prev => [newExit, ...prev]);
-    toast.success('Exit process initiated');
-    setDialogOpen(false);
-    setForm({ employeeName: '', department: '', resignationDate: '', lastWorkingDay: '', reason: '' });
+  const submitInterview = (exitId: string) => {
+    updateMutation.mutate({
+      id: exitId,
+      updates: {
+        exit_interview: true,
+        exit_interview_answers: interviewAnswers
+      }
+    });
+  };
+
+  const markSettlementDone = (exitId: string) => {
+    updateMutation.mutate({
+      id: exitId,
+      updates: {
+        settlement_done: true,
+        status: 'completed'
+      }
+    });
   };
 
   const statusColor: Record<string, string> = {
@@ -86,6 +185,21 @@ export default function ExitManagement() {
   };
 
   const selectedRecord = exits.find(e => e.id === selectedExit);
+
+  // Set initial interview answers when selection changes
+  const handleTabChange = (val: string) => {
+    if (val === 'interview' && selectedRecord) {
+      const existingAnswers = selectedRecord.exit_interview_answers;
+      if (existingAnswers && Array.isArray(existingAnswers) && existingAnswers.length > 0) {
+        setInterviewAnswers(existingAnswers);
+      } else {
+        setInterviewAnswers(['', '', '', '']);
+      }
+    }
+  };
+
+  const getEmployeeName = (emp: any) => emp ? `${emp.first_name} ${emp.last_name}` : 'Unknown';
+  const getDepartmentName = (emp: any) => emp?.departments?.name || 'Unknown Department';
 
   return (
     <div className="space-y-6">
@@ -102,25 +216,32 @@ export default function ExitManagement() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Initiate Employee Exit</DialogTitle>
-                <DialogDescription>Start the offboarding process for an employee</DialogDescription>
+                <DialogDescription>Start the offboarding process for an active employee</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label>Employee Name</Label>
-                  <Input placeholder="Full name" value={form.employeeName} onChange={(e) => setForm(f => ({ ...f, employeeName: e.target.value }))} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Department</Label>
-                  <Input placeholder="Department" value={form.department} onChange={(e) => setForm(f => ({ ...f, department: e.target.value }))} />
+                  <Label>Select Employee</Label>
+                  <Select value={form.employee_id} onValueChange={(val) => setForm(f => ({ ...f, employee_id: val }))}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an active employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeEmployees.map((emp: any) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.first_name} {emp.last_name} ({emp.employee_code || 'N/A'}) - {emp.departments?.name || 'No Dept'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Resignation Date</Label>
-                    <Input type="date" value={form.resignationDate} onChange={(e) => setForm(f => ({ ...f, resignationDate: e.target.value }))} />
+                    <Input type="date" value={form.resignation_date} onChange={(e) => setForm(f => ({ ...f, resignation_date: e.target.value }))} />
                   </div>
                   <div className="space-y-2">
                     <Label>Last Working Day</Label>
-                    <Input type="date" value={form.lastWorkingDay} onChange={(e) => setForm(f => ({ ...f, lastWorkingDay: e.target.value }))} />
+                    <Input type="date" value={form.last_working_day} onChange={(e) => setForm(f => ({ ...f, last_working_day: e.target.value }))} />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -129,8 +250,11 @@ export default function ExitManagement() {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreate}>Initiate Exit</Button>
+                <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={createMutation.isPending}>Cancel</Button>
+                <Button onClick={handleCreate} disabled={createMutation.isPending}>
+                  {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Initiate Exit
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -162,7 +286,7 @@ export default function ExitManagement() {
             <AlertTriangle className="w-8 h-8 text-destructive" />
             <div>
               <p className="text-sm text-muted-foreground">Pending Settlements</p>
-              <p className="text-3xl font-bold text-destructive">{exits.filter(e => !e.settlementDone).length}</p>
+              <p className="text-3xl font-bold text-destructive">{exits.filter(e => !e.settlement_done).length}</p>
             </div>
           </CardContent>
         </Card>
@@ -170,12 +294,14 @@ export default function ExitManagement() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Exit List */}
-        <Card className="lg:col-span-1 overflow-hidden">
+        <Card className="lg:col-span-1 overflow-hidden h-fit">
           <CardHeader className="border-b border-border/50 pb-4">
             <CardTitle className="text-base">Exit Records</CardTitle>
           </CardHeader>
-          <CardContent className="p-0 divide-y divide-border/50">
-            {exits.length === 0 ? (
+          <CardContent className="p-0 divide-y divide-border/50 max-h-[600px] overflow-y-auto">
+            {isLoadingExits ? (
+              <div className="p-8 flex justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            ) : exits.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-12 px-4">
                 <UserMinus className="h-10 w-10 text-muted-foreground/30" />
                 <p className="text-sm text-muted-foreground">No exit records</p>
@@ -188,10 +314,10 @@ export default function ExitManagement() {
                   onClick={() => setSelectedExit(exit.id)}
                 >
                   <div className="flex items-center justify-between mb-1">
-                    <h4 className="font-medium text-sm">{exit.employeeName}</h4>
+                    <h4 className="font-medium text-sm">{getEmployeeName(exit.employees)}</h4>
                     <Badge variant="outline" className={`text-[10px] uppercase ${statusColor[exit.status]}`}>{exit.status.replace('_', ' ')}</Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">{exit.department} • LWD: {exit.lastWorkingDay}</p>
+                  <p className="text-xs text-muted-foreground">{getDepartmentName(exit.employees)} • LWD: {exit.last_working_day || 'N/A'}</p>
                 </div>
               ))
             )}
@@ -199,7 +325,7 @@ export default function ExitManagement() {
         </Card>
 
         {/* Detail Panel */}
-        <Card className="lg:col-span-2 overflow-hidden">
+        <Card className="lg:col-span-2 overflow-hidden h-fit">
           {!selectedRecord ? (
             <CardContent className="flex flex-col items-center gap-2 py-16">
               <ClipboardCheck className="h-12 w-12 text-muted-foreground/30" />
@@ -208,88 +334,122 @@ export default function ExitManagement() {
           ) : (
             <>
               <CardHeader className="border-b border-border/50 pb-4">
-                <CardTitle className="text-base">{selectedRecord.employeeName}</CardTitle>
-                <CardDescription>{selectedRecord.department} • Resigned: {selectedRecord.resignationDate}</CardDescription>
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span>{getEmployeeName(selectedRecord.employees)}</span>
+                  {selectedRecord.status !== 'completed' && selectedRecord.assets_returned && selectedRecord.exit_interview && (
+                     <Button size="sm" variant="outline" className="h-7 text-xs border-success/50 text-success hover:bg-success hover:text-success-foreground" onClick={() => updateMutation.mutate({id: selectedRecord.id, updates: {status: 'in_progress'}})}>Mark In Progress</Button>
+                  )}
+                </CardTitle>
+                <CardDescription>{getDepartmentName(selectedRecord.employees)} • Resigned: {selectedRecord.resignation_date || 'N/A'}</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                <Tabs defaultValue="overview">
+                <Tabs defaultValue="overview" onValueChange={handleTabChange}>
                   <TabsList className="w-full justify-start rounded-none border-b border-border/50 bg-transparent px-4">
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="assets">Asset Return</TabsTrigger>
                     <TabsTrigger value="interview">Exit Interview</TabsTrigger>
                     <TabsTrigger value="settlement">Settlement</TabsTrigger>
                   </TabsList>
-                  <TabsContent value="overview" className="p-6 space-y-4">
+                  
+                  <TabsContent value="overview" className="p-6 space-y-4 mt-0">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-3 rounded border border-border/50 bg-background/50">
                         <p className="text-xs text-muted-foreground uppercase">Resignation Date</p>
-                        <p className="font-medium text-sm mt-1">{selectedRecord.resignationDate}</p>
+                        <p className="font-medium text-sm mt-1">{selectedRecord.resignation_date || '—'}</p>
                       </div>
                       <div className="p-3 rounded border border-border/50 bg-background/50">
                         <p className="text-xs text-muted-foreground uppercase">Last Working Day</p>
-                        <p className="font-medium text-sm mt-1">{selectedRecord.lastWorkingDay}</p>
+                        <p className="font-medium text-sm mt-1">{selectedRecord.last_working_day || '—'}</p>
                       </div>
                     </div>
                     <div className="p-3 rounded border border-border/50 bg-background/50">
                       <p className="text-xs text-muted-foreground uppercase">Reason for Leaving</p>
                       <p className="text-sm mt-1">{selectedRecord.reason || 'Not specified'}</p>
                     </div>
-                    <div className="flex gap-3">
-                      <Badge variant="outline" className={selectedRecord.exitInterview ? 'border-success text-success bg-success/10' : 'border-muted text-muted-foreground'}>
-                        <MessageSquare className="w-3 h-3 mr-1" /> Exit Interview {selectedRecord.exitInterview ? '✓' : '—'}
+                    <div className="flex flex-wrap gap-3 mt-4">
+                      <Badge variant="outline" className={selectedRecord.exit_interview ? 'border-success text-success bg-success/10' : 'border-muted text-muted-foreground'}>
+                        <MessageSquare className="w-3 h-3 mr-1" /> Exit Interview {selectedRecord.exit_interview ? '✓' : '—'}
                       </Badge>
-                      <Badge variant="outline" className={selectedRecord.assetsReturned ? 'border-success text-success bg-success/10' : 'border-muted text-muted-foreground'}>
-                        <Package className="w-3 h-3 mr-1" /> Assets {selectedRecord.assetsReturned ? '✓' : '—'}
+                      <Badge variant="outline" className={selectedRecord.assets_returned ? 'border-success text-success bg-success/10' : 'border-muted text-muted-foreground'}>
+                        <Package className="w-3 h-3 mr-1" /> Assets {selectedRecord.assets_returned ? '✓' : '—'}
                       </Badge>
-                      <Badge variant="outline" className={selectedRecord.settlementDone ? 'border-success text-success bg-success/10' : 'border-muted text-muted-foreground'}>
-                        <DollarSign className="w-3 h-3 mr-1" /> Settlement {selectedRecord.settlementDone ? '✓' : '—'}
+                      <Badge variant="outline" className={selectedRecord.settlement_done ? 'border-success text-success bg-success/10' : 'border-muted text-muted-foreground'}>
+                        <DollarSign className="w-3 h-3 mr-1" /> Settlement {selectedRecord.settlement_done ? '✓' : '—'}
                       </Badge>
                     </div>
                   </TabsContent>
-                  <TabsContent value="assets" className="p-6">
-                    <h4 className="text-sm font-medium mb-4">Asset Return Checklist</h4>
+                  
+                  <TabsContent value="assets" className="p-6 mt-0">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-sm font-medium">Asset Return Checklist</h4>
+                      {selectedRecord.assets_returned && <Badge variant="outline" className="border-success text-success bg-success/10">All Returned</Badge>}
+                    </div>
                     <div className="space-y-3">
                       {assetChecklist.map((item, idx) => {
-                        const checks = getAssetChecks(selectedRecord.id);
+                        const checks = getAssetChecks(selectedRecord);
                         return (
-                          <div key={item} className="flex items-center gap-3 p-2 rounded hover:bg-muted/20 cursor-pointer" onClick={() => toggleAsset(selectedRecord.id, idx)}>
-                            <Checkbox checked={checks[idx]} />
-                            <span className={`text-sm ${checks[idx] ? 'line-through text-muted-foreground' : ''}`}>{item}</span>
+                          <div key={item} className="flex items-center gap-3 p-2 rounded border border-border/30 hover:bg-muted/20 cursor-pointer" onClick={() => toggleAsset(selectedRecord.id, idx, checks)}>
+                            {updateMutation.isPending && updateMutation.variables?.updates?.assets_checklist !== undefined ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                            ) : (
+                              <Checkbox checked={checks[idx] || false} />
+                            )}
+                            <span className={`text-sm select-none ${checks[idx] ? 'line-through text-muted-foreground' : ''}`}>{item}</span>
                           </div>
                         );
                       })}
                     </div>
                   </TabsContent>
-                  <TabsContent value="interview" className="p-6 space-y-4">
-                    <h4 className="text-sm font-medium">Exit Interview Form</h4>
-                    <div className="space-y-3">
+                  
+                  <TabsContent value="interview" className="p-6 space-y-4 mt-0">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-medium">Exit Interview Form</h4>
+                      {selectedRecord.exit_interview && <Badge variant="outline" className="border-success text-success bg-success/10">Completed</Badge>}
+                    </div>
+                    <div className="space-y-4">
                       {['What did you enjoy most about working here?', 'What could we improve as an organization?', 'Would you recommend this company to others?', 'Any suggestions for your successor?'].map((q, i) => (
                         <div key={i} className="space-y-2">
                           <Label className="text-xs text-muted-foreground">{q}</Label>
-                          <Textarea placeholder="Your response..." rows={2} className="text-sm" />
+                          <Textarea 
+                            placeholder="Your response..." 
+                            rows={2} 
+                            className="text-sm resize-y" 
+                            disabled={selectedRecord.exit_interview}
+                            value={interviewAnswers[i] || ''}
+                            onChange={(e) => {
+                              const newAns = [...interviewAnswers];
+                              newAns[i] = e.target.value;
+                              setInterviewAnswers(newAns);
+                            }}
+                          />
                         </div>
                       ))}
-                      <Button size="sm">Submit Interview</Button>
+                      {!selectedRecord.exit_interview && (
+                        <Button size="sm" onClick={() => submitInterview(selectedRecord.id)} disabled={updateMutation.isPending}>
+                          {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Submit Interview
+                        </Button>
+                      )}
                     </div>
                   </TabsContent>
-                  <TabsContent value="settlement" className="p-6 space-y-4">
-                    <h4 className="text-sm font-medium">Final Settlement Summary</h4>
+                  
+                  <TabsContent value="settlement" className="p-6 space-y-4 mt-0">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-medium">Final Settlement Summary</h4>
+                      {selectedRecord.settlement_done && <Badge variant="outline" className="border-success text-success bg-success/10">Settled</Badge>}
+                    </div>
+                    {/* Placeholder content for settlement, in real app, fetch from payroll module */}
                     <div className="space-y-3">
-                      {[
-                        { label: 'Remaining Salary', amount: '₹45,000' },
-                        { label: 'Leave Encashment', amount: '₹12,500' },
-                        { label: 'Gratuity', amount: '₹0' },
-                        { label: 'Bonus (Pro-rata)', amount: '₹8,333' },
-                        { label: 'Deductions', amount: '-₹2,000' },
-                      ].map(item => (
-                        <div key={item.label} className="flex items-center justify-between p-3 bg-background/50 rounded border border-border/50">
-                          <span className="text-sm text-muted-foreground">{item.label}</span>
-                          <span className="font-medium text-sm">{item.amount}</span>
-                        </div>
-                      ))}
-                      <div className="flex items-center justify-between p-3 bg-primary/5 rounded border border-primary/30">
-                        <span className="font-semibold text-sm">Total Settlement</span>
-                        <span className="font-bold text-lg text-primary">₹63,833</span>
+                      <div className="p-4 border border-border/50 bg-background/40 rounded-md text-center">
+                         <p className="text-sm text-muted-foreground mb-4">Settlement usually connects with the Payroll module. Mark as completed once the final checks are cleared.</p>
+                         {!selectedRecord.settlement_done ? (
+                           <Button onClick={() => markSettlementDone(selectedRecord.id)} disabled={updateMutation.isPending}>
+                             {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                             Mark Settlement as Processed
+                           </Button>
+                         ) : (
+                           <Button variant="outline" disabled>Settlement Done</Button>
+                         )}
                       </div>
                     </div>
                   </TabsContent>

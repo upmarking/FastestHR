@@ -3,13 +3,14 @@ import {
   LayoutDashboard, Users, Clock, CalendarDays, DollarSign, BarChart3,
   Briefcase, GraduationCap, Headset, Megaphone, PieChart, Settings,
   Globe, Building2, CreditCard, Server, ChevronLeft, LogOut, Zap,
-  FileText, UserPlus, Network, UserMinus, CalendarCheck
+  FileText, UserPlus, Network, UserMinus, CalendarCheck, ChevronRight
 } from 'lucide-react';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
-  SidebarFooter, SidebarHeader, useSidebar,
+  SidebarFooter, SidebarHeader, useSidebar, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton,
 } from '@/components/ui/sidebar';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { NavLink } from '@/components/NavLink';
 import { useAuthStore } from '@/store/auth-store';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -24,29 +25,35 @@ interface NavItem {
   url: string;
   icon: any;
   roles: Role[]; // which roles can see this item
+  subItems?: Omit<NavItem, 'icon' | 'subItems'>[];
 }
 
 const ALL_ROLES: Role[] = ['company_admin', 'hr_manager', 'recruiter', 'user'];
 const ADMIN_HR: Role[] = ['company_admin', 'hr_manager'];
 const ADMIN_ONLY: Role[] = ['company_admin'];
 
-const mainNav: NavItem[] = [
+const fastBoardNav: NavItem[] = [
   { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, roles: ALL_ROLES },
-  { title: 'Employees', url: '/employees', icon: Users, roles: ADMIN_HR },
+  { title: 'Announcements', url: '/announcements', icon: Megaphone, roles: ALL_ROLES },
+  { title: 'Employee', url: '/employees', icon: Users, roles: ADMIN_HR },
   { title: 'Attendance', url: '/attendance', icon: Clock, roles: ALL_ROLES },
   { title: 'Leave', url: '/leave', icon: CalendarDays, roles: ALL_ROLES },
   { title: 'Holidays', url: '/holidays', icon: CalendarCheck, roles: ALL_ROLES },
-  { title: 'Payroll', url: '/payroll', icon: DollarSign, roles: [...ADMIN_HR, 'user', 'recruiter'] },
-  { title: 'Performance', url: '/performance', icon: BarChart3, roles: ALL_ROLES },
-  { title: 'Recruitment', url: '/recruitment', icon: Briefcase, roles: ['company_admin', 'hr_manager', 'recruiter'] },
-  { title: 'Learning', url: '/learning', icon: GraduationCap, roles: ALL_ROLES },
-  { title: 'Help Desk', url: '/helpdesk', icon: Headset, roles: ALL_ROLES },
-  { title: 'Announcements', url: '/announcements', icon: Megaphone, roles: ALL_ROLES },
   { title: 'Documents', url: '/documents', icon: FileText, roles: ALL_ROLES },
-  { title: 'Reports', url: '/reports', icon: PieChart, roles: ADMIN_HR },
+  { title: 'Learning', url: '/learning', icon: GraduationCap, roles: ALL_ROLES },
+];
+
+const managementNav: NavItem[] = [
+  { title: 'Recruitment', url: '/recruitment', icon: Briefcase, roles: ['company_admin', 'hr_manager', 'recruiter'] },
   { title: 'Onboarding', url: '/onboarding', icon: UserPlus, roles: ADMIN_HR },
-  { title: 'Org Chart', url: '/org-chart', icon: Network, roles: ALL_ROLES },
-  { title: 'Exit Mgmt', url: '/exit-management', icon: UserMinus, roles: ADMIN_HR },
+  { title: 'Performance', url: '/performance', icon: BarChart3, roles: ALL_ROLES },
+  { title: 'Help Desk', url: '/helpdesk', icon: Headset, roles: ALL_ROLES },
+  { title: 'Reports', url: '/reports', icon: PieChart, roles: ADMIN_HR },
+  { title: 'Payroll', url: '/payroll', icon: DollarSign, roles: [...ADMIN_HR, 'user', 'recruiter'] },
+  { title: 'Exit Management', url: '/exit-management', icon: UserMinus, roles: ADMIN_HR },
+];
+
+const accountNav: NavItem[] = [
   { title: 'Settings', url: '/settings', icon: Settings, roles: ADMIN_ONLY },
 ];
 
@@ -66,9 +73,13 @@ export function AppSidebar() {
   const userRole = (profile?.platform_role || 'user') as Role;
 
   // Filter sidebar items by user's role
-  const filteredNav = isSuperAdmin
-    ? mainNav // super_admin sees everything
-    : mainNav.filter(item => item.roles.includes(userRole));
+  const filterNav = (navItems: NavItem[]) => isSuperAdmin
+    ? navItems
+    : navItems.filter(item => item.roles.includes(userRole));
+
+  const filteredFastBoard = filterNav(fastBoardNav);
+  const filteredManagement = filterNav(managementNav);
+  const filteredAccount = filterNav(accountNav);
 
   const isActive = (url: string) => {
     if (url === '/dashboard') return location.pathname === '/dashboard';
@@ -109,31 +120,122 @@ export function AppSidebar() {
       <Separator />
 
       <SidebarContent className="px-2">
-        <SidebarGroup>
-          {!collapsed && <SidebarGroupLabel className="font-display text-xs font-semibold uppercase tracking-wider text-muted-foreground">Main Systems</SidebarGroupLabel>}
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {filteredNav.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActive(item.url)}
-                    tooltip={item.title}
-                  >
-                    <NavLink
-                      to={item.url}
-                      className="transition-all hover:text-primary font-medium"
-                      activeClassName="bg-primary/10 text-primary font-semibold rounded-md"
+        {filteredFastBoard.length > 0 && (
+          <SidebarGroup>
+            {!collapsed && <SidebarGroupLabel className="font-display text-xs font-semibold uppercase tracking-wider text-muted-foreground">FastBoard</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredFastBoard.map((item) => (
+                  item.subItems ? (
+                    <Collapsible key={item.title} asChild defaultOpen={isActive(item.url) || item.subItems.some(sub => isActive(sub.url))}>
+                      <SidebarMenuItem>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton tooltip={item.title}>
+                            <item.icon className="h-4 w-4 shrink-0" />
+                            {!collapsed && <span>{item.title}</span>}
+                            {!collapsed && <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />}
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <SidebarMenuSub>
+                            {item.subItems.map((subItem) => (
+                              <SidebarMenuSubItem key={subItem.title}>
+                                <SidebarMenuSubButton asChild isActive={isActive(subItem.url)}>
+                                  <NavLink
+                                    to={subItem.url}
+                                    className="transition-all hover:text-primary font-medium w-full"
+                                    activeClassName="bg-primary/10 text-primary font-semibold rounded-md"
+                                  >
+                                    <span>{subItem.title}</span>
+                                  </NavLink>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            ))}
+                          </SidebarMenuSub>
+                        </CollapsibleContent>
+                      </SidebarMenuItem>
+                    </Collapsible>
+                  ) : (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive(item.url)}
+                        tooltip={item.title}
+                      >
+                        <NavLink
+                          to={item.url}
+                          className="transition-all hover:text-primary font-medium"
+                          activeClassName="bg-primary/10 text-primary font-semibold rounded-md"
+                        >
+                          <item.icon className="h-4 w-4 shrink-0" />
+                          {!collapsed && <span>{item.title}</span>}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {filteredManagement.length > 0 && (
+          <SidebarGroup>
+            <Separator className="mb-2" />
+            {!collapsed && <SidebarGroupLabel className="font-display text-xs font-semibold uppercase tracking-wider text-muted-foreground">Management</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredManagement.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive(item.url)}
+                      tooltip={item.title}
                     >
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      {!collapsed && <span>{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                      <NavLink
+                        to={item.url}
+                        className="transition-all hover:text-primary font-medium"
+                        activeClassName="bg-primary/10 text-primary font-semibold rounded-md"
+                      >
+                        <item.icon className="h-4 w-4 shrink-0" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {filteredAccount.length > 0 && (
+          <SidebarGroup>
+            <Separator className="mb-2" />
+            {!collapsed && <SidebarGroupLabel className="font-display text-xs font-semibold uppercase tracking-wider text-muted-foreground">Account</SidebarGroupLabel>}
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredAccount.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive(item.url)}
+                      tooltip={item.title}
+                    >
+                      <NavLink
+                        to={item.url}
+                        className="transition-all hover:text-primary font-medium"
+                        activeClassName="bg-primary/10 text-primary font-semibold rounded-md"
+                      >
+                        <item.icon className="h-4 w-4 shrink-0" />
+                        {!collapsed && <span>{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {isSuperAdmin && (
           <SidebarGroup>

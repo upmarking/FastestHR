@@ -46,6 +46,7 @@ interface EmployeeRecord {
   avatar_url: string | null;
   department_id: string | null;
   designation_id: string | null;
+  reporting_manager_id: string | null;
   departments?: { name: string } | null;
   designations?: { title: string } | null;
 }
@@ -96,6 +97,21 @@ export default function EmployeeDetail() {
     enabled: !!profile?.company_id,
   });
 
+  const { data: managers = [] } = useQuery({
+    queryKey: ['managers', profile?.company_id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name, employee_code')
+        .eq('company_id', profile!.company_id!)
+        .eq('status', 'active')
+        .is('deleted_at', null)
+        .order('first_name');
+      return data || [];
+    },
+    enabled: !!profile?.company_id,
+  });
+
   const { data: leaveHistory = [] } = useQuery({
     queryKey: ['leave-history', id],
     queryFn: async () => {
@@ -135,6 +151,7 @@ export default function EmployeeDetail() {
         employee_code: payload.employee_code || null,
         department_id: payload.department_id || null,
         designation_id: payload.designation_id || null,
+        reporting_manager_id: payload.reporting_manager_id || null,
         date_of_joining: payload.date_of_joining || null,
         date_of_birth: payload.date_of_birth || null,
         gender: payload.gender,
@@ -163,14 +180,27 @@ export default function EmployeeDetail() {
 
   const terminateMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
+      const { error: empError } = await supabase
         .from('employees')
         .update({ status: 'terminated', deleted_at: new Date().toISOString() })
         .eq('id', id!);
-      if (error) throw error;
+      if (empError) throw empError;
+
+      const { error: exitError } = await supabase
+        .from('employee_exits')
+        .insert({
+          company_id: profile!.company_id!,
+          employee_id: id!,
+          status: 'initiated',
+          reason: 'Terminated by company',
+          last_working_day: new Date().toISOString().split('T')[0]
+        });
+      // Ignore unique violation if the employee already has an exit record
+      if (exitError && exitError.code !== '23505') throw exitError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['exits'] });
       toast.success('SYSTEM::EMPLOYEE_TERMINATED');
       navigate('/employees');
     },
@@ -386,6 +416,13 @@ export default function EmployeeDetail() {
               {
                 label: 'Designation', name: 'designation_id',
                 options: designations.map(d => ({ value: d.id, label: d.title }))
+              },
+              {
+                label: 'Reporting Manager', name: 'reporting_manager_id',
+                options: managers.map((m: any) => ({
+                  value: m.id,
+                  label: `${m.first_name} ${m.last_name}${m.employee_code ? ` (${m.employee_code})` : ''}`,
+                }))
               },
             ] as { label: string; name: string; options: { value: string; label: string }[] }[]).map(({ label, name, options }) => (
               <div key={name} className="space-y-1.5">

@@ -1,11 +1,7 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Network, ChevronDown, ChevronRight, Users } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuthStore } from '@/store/auth-store';
+import { Network, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
 interface OrgNode {
@@ -110,94 +106,26 @@ function OrgNodeCard({ node, level = 0 }: { node: OrgNode; level?: number }) {
   );
 }
 
-export default function OrgChart() {
-  const { profile } = useAuthStore();
-
-  const { data: employees = [], isLoading } = useQuery({
-    queryKey: ['org-chart-employees', profile?.company_id],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('employees')
-        .select('id, first_name, last_name, avatar_url, reporting_manager_id, status, departments(name), designations(title)')
-        .eq('company_id', profile!.company_id!)
-        .is('deleted_at', null)
-        .order('first_name');
-      return data || [];
-    },
-    enabled: !!profile?.company_id,
-  });
-
+export function EmployeeOrgChart({ employees }: { employees: any[] }) {
   const orgTree = buildOrgTree(employees);
-  const totalDepts = new Set(employees.map((e: any) => e.departments?.name).filter(Boolean)).size;
+
+  if (orgTree.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-12">
+        <Network className="h-12 w-12 text-muted-foreground/30" />
+        <p className="text-sm text-muted-foreground">No organizational data available</p>
+        <p className="text-xs text-muted-foreground/60">Set reporting relationships in employee profiles to build the org chart</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Organization Chart</h1>
-          <p className="text-muted-foreground mt-1">Visual hierarchy & reporting structure</p>
-        </div>
+    <div className="flex justify-center min-w-max p-8">
+      <div className="flex flex-col items-center gap-2">
+        {orgTree.map(root => (
+          <OrgNodeCard key={root.id} node={root} />
+        ))}
       </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="p-5 flex items-center gap-4">
-            <Users className="w-7 h-7 text-primary" />
-            <div>
-              <p className="text-sm text-muted-foreground">Total Employees</p>
-              <p className="text-2xl font-bold">{employees.length}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5 flex items-center gap-4">
-            <Network className="w-7 h-7 text-info" />
-            <div>
-              <p className="text-sm text-muted-foreground">Departments</p>
-              <p className="text-2xl font-bold">{totalDepts}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-5 flex items-center gap-4">
-            <ChevronDown className="w-7 h-7 text-warning" />
-            <div>
-              <p className="text-sm text-muted-foreground">Org Levels</p>
-              <p className="text-2xl font-bold">{orgTree.length > 0 ? 'Active' : '—'}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="overflow-hidden">
-        <CardHeader className="border-b border-border/50 pb-4">
-          <CardTitle className="flex items-center gap-2">
-            <Network className="w-5 h-5" /> Organization Hierarchy
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-8 overflow-x-auto">
-          {isLoading ? (
-            <div className="flex flex-col items-center gap-4">
-              <Skeleton className="h-32 w-56" />
-              <Skeleton className="h-16 w-full max-w-md" />
-            </div>
-          ) : orgTree.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-12">
-              <Network className="h-12 w-12 text-muted-foreground/30" />
-              <p className="text-sm text-muted-foreground">No organizational data available</p>
-              <p className="text-xs text-muted-foreground/60">Set reporting relationships in employee profiles to build the org chart</p>
-            </div>
-          ) : (
-            <div className="flex justify-center min-w-max">
-              <div className="flex flex-col items-center gap-2">
-                {orgTree.map(root => (
-                  <OrgNodeCard key={root.id} node={root} />
-                ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
