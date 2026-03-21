@@ -37,8 +37,21 @@ interface OfferTemplate {
   created_at: string;
 }
 
-const BASE_TEMPLATE_VARIABLES = ['{{Name}}', '{{Joined Date}}', '{{Payout}}', '{{Designation}}', '{{Offer Number}}'];
-const BASE_EMAIL_VARIABLES = ['{{Name}}', '{{job_title}}', '{{offer_number}}', '{{offer_link}}'];
+const OFFER_VARIABLES = [
+  '{{Name}}', 
+  '{{Designation}}', 
+  '{{Offer Number}}', 
+  '{{Joined Date}}', 
+  '{{Payout}}', 
+  '{{Offer Link}}', 
+  '{{Today}}',
+  '{{Basic Pay Percent}}',
+  '{{DA Percent}}',
+  '{{HRA Percent}}',
+  '{{Conveyance Percent}}',
+  '{{Special Allowance Percent}}',
+  '{{Medical Insurance Percent}}'
+];
 
 function VariableButtons({ variables, onInsert }: { variables: string[], onInsert: (v: string) => void }) {
   return (
@@ -199,8 +212,7 @@ function OfferTemplateEditor({ isOpen, onClose, template }: { isOpen: boolean, o
   const [isSaving, setIsSaving] = useState(false);
 
   // Build dynamic variable lists by appending custom variables
-  const TEMPLATE_VARIABLES = [...BASE_TEMPLATE_VARIABLES, ...customVariables.map(v => `{{${v.key}}}`) ];
-  const EMAIL_VARIABLES = [...BASE_EMAIL_VARIABLES, ...customVariables.map(v => `{{${v.key}}}`) ];
+  const ALL_VARIABLES = [...OFFER_VARIABLES, ...customVariables.map(v => `{{${v.key}}}`) ];
 
   useEffect(() => {
     if (template) {
@@ -215,12 +227,28 @@ function OfferTemplateEditor({ isOpen, onClose, template }: { isOpen: boolean, o
       setName('');
       setHtmlContent('<h1>Offer Letter</h1>\n<p>Dear {{Name}},</p>\n<p>We are pleased to offer you the position of {{Designation}}...</p>\n<p>Joining Date: {{Joined Date}}</p>\n<p>Annual Payout: {{Payout}}</p>');
       setLetterheadUrl('');
-      setEmailSubject('Offer of Employment — {{job_title}}');
-      setEmailBody('Dear {{Name}},\n\nWe are excited to offer you the position of {{job_title}}!\n\nPlease find your official offer letter attached as a PDF.\n\nYou can also view and accept your offer online:\n{{offer_link}}\n\nBest regards,\nThe Hiring Team');
+      setEmailSubject('Offer of Employment — {{Designation}}');
+      setEmailBody('Dear {{Name}},\n\nWe are excited to offer you the position of {{Designation}}!\n\nPlease find your official offer letter attached as a PDF.\n\nYou can also view and accept your offer online:\n{{Offer Link}}\n\nBest regards,\nThe Hiring Team');
       setIsPredefinedHtml(false);
       setCustomVariables([]);
     }
   }, [template, isOpen]);
+
+  const { data: company } = useQuery({
+    queryKey: ['company-settings', profile?.company_id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('companies')
+        .select('currency')
+        .eq('id', profile!.company_id!)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!profile?.company_id && isOpen,
+  });
+
+  const currencySymbol = company?.currency || 'USD';
 
   const handleSave = async () => {
     if (!name.trim() || !htmlContent.trim()) {
@@ -265,6 +293,11 @@ function OfferTemplateEditor({ isOpen, onClose, template }: { isOpen: boolean, o
     }
   };
 
+  const formattedSamplePayout = new Number(120000).toLocaleString('en-US', {
+    style: 'currency',
+    currency: currencySymbol,
+  });
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
@@ -304,7 +337,7 @@ function OfferTemplateEditor({ isOpen, onClose, template }: { isOpen: boolean, o
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email Subject</label>
-                <VariableButtons variables={EMAIL_VARIABLES} onInsert={(v) => setEmailSubject(prev => prev + v)} />
+                <VariableButtons variables={ALL_VARIABLES} onInsert={(v) => setEmailSubject(prev => prev + v)} />
               </div>
               <Input 
                 value={emailSubject} 
@@ -316,7 +349,7 @@ function OfferTemplateEditor({ isOpen, onClose, template }: { isOpen: boolean, o
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email Body</label>
-                <VariableButtons variables={EMAIL_VARIABLES} onInsert={(v) => setEmailBody(prev => prev + v)} />
+                <VariableButtons variables={ALL_VARIABLES} onInsert={(v) => setEmailBody(prev => prev + v)} />
               </div>
               <textarea
                 value={emailBody}
@@ -326,7 +359,7 @@ function OfferTemplateEditor({ isOpen, onClose, template }: { isOpen: boolean, o
                 className="flex w-full rounded-md border border-border/50 bg-background/50 px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none resize-y leading-relaxed"
               />
               <p className="text-[10px] text-muted-foreground italic">
-                The PDF offer letter will be attached automatically. Use <code>{"{{offer_link}}"}</code> to insert the online acceptance link.
+                The PDF offer letter will be attached automatically. Use <code>{"{{Offer Link}}"}</code> to insert the online acceptance link.
               </p>
             </div>
           </TabsContent>
@@ -367,7 +400,7 @@ function OfferTemplateEditor({ isOpen, onClose, template }: { isOpen: boolean, o
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">HTML Content (Offer Letter PDF) *</label>
-                <VariableButtons variables={TEMPLATE_VARIABLES} onInsert={(v) => setHtmlContent(prev => prev + v)} />
+                <VariableButtons variables={ALL_VARIABLES} onInsert={(v) => setHtmlContent(prev => prev + v)} />
               </div>
               <textarea
                 value={htmlContent}
@@ -495,8 +528,10 @@ function OfferTemplateEditor({ isOpen, onClose, template }: { isOpen: boolean, o
                     'Designation': 'Senior Software Engineer',
                     'job_title': 'Senior Software Engineer',
                     'Joined Date': new Date().toLocaleDateString(),
-                    'Payout': '$120,000.00',
+                    'Payout': formattedSamplePayout,
                     'Offer Number': 'OFFER-2026-0001',
+                    'Offer Link': 'https://fastesthre.com/offer/sample-token',
+                    'Today': new Date().toLocaleDateString(),
                     ...Object.fromEntries(customVariables.map(v => [
                       v.key, 
                       v.type === 'number' ? '12345' : 

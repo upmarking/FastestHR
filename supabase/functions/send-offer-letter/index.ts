@@ -115,21 +115,40 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 5. Format Email
-    const publicUrl = `${Deno.env.get('SITE_URL') || 'http://localhost:5173'}/offer/${savedOffer.token}`;
+    const formattedDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const payoutNum = typeof offer_data?.payout === 'string' 
+      ? parseFloat(offer_data.payout.replace(/[^0-9.-]+/g, "")) 
+      : offer_data?.payout;
+    
+    const formattedPayout = (payoutNum || 0).toLocaleString('en-US', { 
+      style: 'currency', 
+      currency: company.currency || 'USD' 
+    });
     
     // Replace variables in template subject/body
     const replaceVars = (text: string) => {
       let result = text
-        .replace(/\{\{Name\}\}/g, candidate.full_name)
-        .replace(/\{\{job_title\}\}/g, job.title)
-        .replace(/\{\{offer_number\}\}/g, offer_number || '')
-        .replace(/\{\{offer_link\}\}/g, publicUrl);
+        // Unified variants (Case-insensitive)
+        .replace(/\{\{Name\}\}/gi, candidate.full_name)
+        .replace(/\{\{Designation\}\}/gi, job.title)
+        .replace(/\{\{Offer Number\}\}/gi, offer_number || '')
+        .replace(/\{\{Joined Date\}\}/gi, offer_data?.joiningDate || '')
+        .replace(/\{\{Payout\}\}/gi, formattedPayout || '')
+        .replace(/\{\{Offer Link\}\}/gi, publicUrl)
+        .replace(/\{\{Today\}\}/gi, formattedDate)
+        // Legacy variants
+        .replace(/\{\{candidate_name\}\}/gi, candidate.full_name)
+        .replace(/\{\{job_title\}\}/gi, job.title)
+        .replace(/\{\{offer_number\}\}/gi, offer_number || '')
+        .replace(/\{\{offer_link\}\}/gi, publicUrl)
+        .replace(/\{\{first_name\}\}/gi, candidate.full_name.split(' ')[0]);
 
       // Replace custom variables
       if (offer_data?.custom_variable_values) {
         for (const [key, value] of Object.entries(offer_data.custom_variable_values)) {
-          result = result.split(`{{${key}}}`).join(value as string);
+          // Use a case-insensitive regex for custom variables too
+          const customRegex = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
+          result = result.replace(customRegex, value as string);
         }
       }
       return result;

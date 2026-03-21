@@ -2,19 +2,31 @@ import { supabase } from '@/integrations/supabase/client';
 // @ts-ignore
 import html2pdf from 'html2pdf.js';
 
+interface CompensationStructure {
+  basic_pay: number;
+  dearness_allowance: number;
+  house_rental: number;
+  conveyance_allowance: number;
+  special_allowance: number;
+  medical_insurance: number;
+}
+
 interface GenerateOfferParams {
   htmlContent: string;
   letterheadUrl?: string | null;
   candidateName: string;
   jobTitle: string;
   joiningDate: string;
-  payout: number;
+  payout: number | string;
   offerNumber: string;
   companyId: string;
   candidateId: string;
   isPredefinedHtml?: boolean;
   customVariableValues?: Record<string, string>;
   currency?: string;
+  today?: string;
+  offerLink?: string;
+  compensationStructure?: CompensationStructure | null;
 }
 
 /**
@@ -23,7 +35,9 @@ interface GenerateOfferParams {
 function substituteVariables(html: string, vars: Record<string, string>): string {
   let result = html;
   for (const [key, value] of Object.entries(vars)) {
-    result = result.split(key).join(value);
+    // Support case-insensitive replacement for base variables
+    const regex = new RegExp(key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    result = result.replace(regex, value);
   }
   return result;
 }
@@ -35,25 +49,50 @@ function buildVariableMap(params: {
   candidateName: string;
   jobTitle: string;
   joiningDate: string;
-  payout: number;
+  payout: number | string;
   offerNumber: string;
   customVariableValues?: Record<string, string>;
   currency?: string;
+  today?: string;
+  offerLink?: string;
+  compensationStructure?: CompensationStructure | null;
 }): Record<string, string> {
-  const formattedPayout = params.payout.toLocaleString('en-US', {
+  const payoutNum = typeof params.payout === 'string' 
+    ? parseFloat(params.payout.replace(/[^0-9.-]+/g, "")) 
+    : params.payout;
+
+  const formattedPayout = (payoutNum || 0).toLocaleString('en-US', {
     style: 'currency',
     currency: params.currency || 'USD',
   });
 
   const baseMap: Record<string, string> = {
     '{{Name}}': params.candidateName,
+    '{{candidate_name}}': params.candidateName,
     '{{Designation}}': params.jobTitle,
     '{{job_title}}': params.jobTitle,
     '{{Joined Date}}': params.joiningDate,
+    '{{joined_date}}': params.joiningDate,
     '{{Payout}}': formattedPayout,
+    '{{payout}}': formattedPayout,
     '{{Offer Number}}': params.offerNumber,
     '{{offer_number}}': params.offerNumber,
+    '{{Offer Link}}': params.offerLink || '',
+    '{{offer_link}}': params.offerLink || '',
+    '{{Today}}': params.today || new Date().toLocaleDateString(),
+    '{{today}}': params.today || new Date().toLocaleDateString(),
   };
+
+  // Merge compensation structure variables
+  if (params.compensationStructure) {
+    const cs = params.compensationStructure;
+    baseMap['{{Basic Pay Percent}}'] = `${cs.basic_pay}%`;
+    baseMap['{{DA Percent}}'] = `${cs.dearness_allowance}%`;
+    baseMap['{{HRA Percent}}'] = `${cs.house_rental}%`;
+    baseMap['{{Conveyance Percent}}'] = `${cs.conveyance_allowance}%`;
+    baseMap['{{Special Allowance Percent}}'] = `${cs.special_allowance}%`;
+    baseMap['{{Medical Insurance Percent}}'] = `${cs.medical_insurance}%`;
+  }
 
   // Merge custom variables into the map
   if (params.customVariableValues) {

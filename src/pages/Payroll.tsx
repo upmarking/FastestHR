@@ -5,12 +5,39 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Download, DollarSign, FileText, Activity, Plus } from 'lucide-react';
+import { Download, DollarSign, FileText, Activity, Plus, Percent, Save, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthStore } from '@/store/auth-store';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
+
+const DEFAULT_COMPENSATION: CompensationStructure = {
+  basic_pay: 50,
+  dearness_allowance: 10,
+  house_rental: 20,
+  conveyance_allowance: 5,
+  special_allowance: 10,
+  medical_insurance: 5,
+};
+
+interface CompensationStructure {
+  basic_pay: number;
+  dearness_allowance: number;
+  house_rental: number;
+  conveyance_allowance: number;
+  special_allowance: number;
+  medical_insurance: number;
+}
+
+const COMP_LABELS: { key: keyof CompensationStructure; label: string; variable: string }[] = [
+  { key: 'basic_pay', label: 'Basic Pay', variable: '{{Basic Pay Percent}}' },
+  { key: 'dearness_allowance', label: 'Dearness Allowance', variable: '{{DA Percent}}' },
+  { key: 'house_rental', label: 'House Rental Allowance', variable: '{{HRA Percent}}' },
+  { key: 'conveyance_allowance', label: 'Conveyance Allowance', variable: '{{Conveyance Percent}}' },
+  { key: 'special_allowance', label: 'Special Allowance', variable: '{{Special Allowance Percent}}' },
+  { key: 'medical_insurance', label: 'Medical Insurance', variable: '{{Medical Insurance Percent}}' },
+];
 
 export default function Payroll() {
   const { profile } = useAuthStore();
@@ -138,6 +165,50 @@ export default function Payroll() {
     review: 'border-info text-info bg-info/10',
     finalized: 'border-success text-success bg-success/10',
     paid: 'border-info text-info bg-info/10',
+  };
+
+  // ── Compensation Structure ──
+  const [compStructure, setCompStructure] = useState<CompensationStructure>({ ...DEFAULT_COMPENSATION });
+
+  const { data: companyCompStructure, isLoading: loadingCompStructure } = useQuery({
+    queryKey: ['compensation-structure', profile?.company_id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('companies')
+        .select('compensation_structure')
+        .eq('id', profile!.company_id!)
+        .single();
+      return (data as any)?.compensation_structure as CompensationStructure | null;
+    },
+    enabled: isAdmin && !!profile?.company_id,
+  });
+
+  useEffect(() => {
+    if (companyCompStructure) {
+      setCompStructure({ ...DEFAULT_COMPENSATION, ...companyCompStructure });
+    }
+  }, [companyCompStructure]);
+
+  const compTotal = Object.values(compStructure).reduce((sum, v) => sum + (Number(v) || 0), 0);
+  const isCompValid = Math.abs(compTotal - 100) < 0.01;
+
+  const saveCompMutation = useMutation({
+    mutationFn: async () => {
+      if (!isCompValid) throw new Error('Total must equal 100%');
+      const { error } = await supabase.from('companies').update({
+        compensation_structure: compStructure,
+      } as any).eq('id', profile!.company_id!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['compensation-structure'] });
+      toast.success('Compensation structure saved');
+    },
+    onError: (err: any) => toast.error(err?.message || 'Failed to save'),
+  });
+
+  const handleCompChange = (key: keyof CompensationStructure, value: string) => {
+    setCompStructure(prev => ({ ...prev, [key]: parseFloat(value) || 0 }));
   };
 
   return (
@@ -278,6 +349,108 @@ export default function Payroll() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Compensation Structure (Admin Only) ── */}
+      {isAdmin && (
+        <Card className="overflow-hidden">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Percent className="w-5 h-5" /> Compensation Structure
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Define the percentage split of CTC across salary components. These are also available as variables in Offer Letter templates.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold transition-colors ${isCompValid ? 'bg-success/10 text-success border border-success/30' : 'bg-destructive/10 text-destructive border border-destructive/30'}`}>
+                  {isCompValid ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
+                  {compTotal.toFixed(1)}%
+                </div>
+                <Button
+                  onClick={() => saveCompMutation.mutate()}
+                  disabled={!isCompValid || saveCompMutation.isPending}
+                  className="gap-2"
+                  size="sm"
+                >
+                  <Save className="w-4 h-4" />
+                  {saveCompMutation.isPending ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingCompStructure ? (
+              <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+            ) : (
+              <>
+                {!isCompValid && (
+                  <div className="flex items-center gap-2 p-3 mb-4 rounded-lg border border-destructive/30 bg-destructive/5 text-destructive text-sm">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>Total must equal exactly <strong>100%</strong> to save. Currently at <strong>{compTotal.toFixed(1)}%</strong> — adjust by <strong>{(100 - compTotal).toFixed(1)}%</strong>.</span>
+                  </div>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {COMP_LABELS.map(({ key, label, variable }) => (
+                    <div key={key} className="p-4 rounded-lg border border-border/50 bg-background/50 space-y-2 hover:border-primary/30 transition-colors">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">{label}</label>
+                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20 font-mono">
+                          {variable}
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={0.5}
+                          value={compStructure[key]}
+                          onChange={(e) => handleCompChange(key, e.target.value)}
+                          className="pr-8 h-10 text-lg font-semibold"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">%</span>
+                      </div>
+                      {/* Visual bar */}
+                      <div className="h-1.5 rounded-full bg-muted/30 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-primary/60 transition-all duration-300"
+                          style={{ width: `${Math.min(compStructure[key], 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Summary bar */}
+                <div className="mt-6 p-4 rounded-lg border border-border/50 bg-background/30">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Allocation</span>
+                    <span className={`text-sm font-bold ${isCompValid ? 'text-success' : 'text-destructive'}`}>
+                      {compTotal.toFixed(1)}% / 100%
+                    </span>
+                  </div>
+                  <div className="h-3 rounded-full bg-muted/20 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${isCompValid ? 'bg-success/70' : compTotal > 100 ? 'bg-destructive/70' : 'bg-warning/70'}`}
+                      style={{ width: `${Math.min(compTotal, 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3">
+                    {COMP_LABELS.map(({ key, label }) => (
+                      <span key={key} className="text-[11px] text-muted-foreground">
+                        {label}: <strong className="text-foreground">{compStructure[key]}%</strong>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
+
