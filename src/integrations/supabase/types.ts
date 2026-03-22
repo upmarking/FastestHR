@@ -396,6 +396,7 @@ export type Database = {
       }
       companies: {
         Row: {
+          compensation_structure: Json | null
           country: string | null
           created_at: string
           currency: string | null
@@ -426,6 +427,7 @@ export type Database = {
           work_days: string[] | null
         }
         Insert: {
+          compensation_structure?: Json | null
           country?: string | null
           created_at?: string
           currency?: string | null
@@ -456,6 +458,7 @@ export type Database = {
           work_days?: string[] | null
         }
         Update: {
+          compensation_structure?: Json | null
           country?: string | null
           created_at?: string
           currency?: string | null
@@ -707,6 +710,85 @@ export type Database = {
             columns: ["department_id"]
             isOneToOne: false
             referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employee_exits: {
+        Row: {
+          assets_checklist: Json | null
+          assets_returned: boolean | null
+          company_id: string
+          created_at: string
+          created_by: string | null
+          employee_id: string
+          exit_interview: boolean | null
+          exit_interview_answers: Json | null
+          id: string
+          last_working_day: string | null
+          reason: string | null
+          resignation_date: string | null
+          settlement_done: boolean | null
+          settlement_summary: Json | null
+          status: Database["public"]["Enums"]["exit_status"] | null
+          updated_at: string
+        }
+        Insert: {
+          assets_checklist?: Json | null
+          assets_returned?: boolean | null
+          company_id: string
+          created_at?: string
+          created_by?: string | null
+          employee_id: string
+          exit_interview?: boolean | null
+          exit_interview_answers?: Json | null
+          id?: string
+          last_working_day?: string | null
+          reason?: string | null
+          resignation_date?: string | null
+          settlement_done?: boolean | null
+          settlement_summary?: Json | null
+          status?: Database["public"]["Enums"]["exit_status"] | null
+          updated_at?: string
+        }
+        Update: {
+          assets_checklist?: Json | null
+          assets_returned?: boolean | null
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          employee_id?: string
+          exit_interview?: boolean | null
+          exit_interview_answers?: Json | null
+          id?: string
+          last_working_day?: string | null
+          reason?: string | null
+          resignation_date?: string | null
+          settlement_done?: boolean | null
+          settlement_summary?: Json | null
+          status?: Database["public"]["Enums"]["exit_status"] | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_exits_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_exits_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_exits_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: true
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -2367,13 +2449,19 @@ export type Database = {
         | "resigned"
         | "terminated"
       employment_type: "full_time" | "part_time" | "contract" | "intern"
+      exit_status: "initiated" | "in_progress" | "completed"
       goal_status: "active" | "completed" | "missed" | "on_track" | "at_risk"
       interview_status: "scheduled" | "completed" | "cancelled"
       invitation_status: "pending" | "accepted" | "expired"
       job_status: "draft" | "open" | "paused" | "closed"
       leave_request_status: "pending" | "approved" | "rejected" | "cancelled"
       payroll_status: "draft" | "processing" | "review" | "finalized" | "paid"
-      platform_role: "super_admin" | "company_admin" | "user"
+      platform_role:
+        | "super_admin"
+        | "company_admin"
+        | "user"
+        | "hr_manager"
+        | "recruiter"
       review_status: "draft" | "active" | "completed"
       survey_status: "draft" | "active" | "closed"
       ticket_priority: "low" | "medium" | "high" | "urgent"
@@ -2536,13 +2624,20 @@ export const Constants = {
         "terminated",
       ],
       employment_type: ["full_time", "part_time", "contract", "intern"],
+      exit_status: ["initiated", "in_progress", "completed"],
       goal_status: ["active", "completed", "missed", "on_track", "at_risk"],
       interview_status: ["scheduled", "completed", "cancelled"],
       invitation_status: ["pending", "accepted", "expired"],
       job_status: ["draft", "open", "paused", "closed"],
       leave_request_status: ["pending", "approved", "rejected", "cancelled"],
       payroll_status: ["draft", "processing", "review", "finalized", "paid"],
-      platform_role: ["super_admin", "company_admin", "user"],
+      platform_role: [
+        "super_admin",
+        "company_admin",
+        "user",
+        "hr_manager",
+        "recruiter",
+      ],
       review_status: ["draft", "active", "completed"],
       survey_status: ["draft", "active", "closed"],
       ticket_priority: ["low", "medium", "high", "urgent"],
