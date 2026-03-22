@@ -28,6 +28,7 @@ import Reports from '@/pages/Reports';
 import Settings from '@/pages/Settings';
 import OfferView from '@/pages/recruitment/OfferView';
 import Documents from '@/pages/Documents';
+import Billing from '@/pages/Billing';
 import Onboarding from '@/pages/Onboarding';
 import ExitManagement from '@/pages/ExitManagement';
 import HolidayCalendar from '@/pages/HolidayCalendar';
@@ -109,7 +110,8 @@ function AppRoutes() {
       <Route path="/onboarding" element={withLayout(<Onboarding />)} />
       <Route path="/exit-management" element={withLayout(<ExitManagement />)} />
       <Route path="/holidays" element={withLayout(<HolidayCalendar />)} />
-      <Route path="/settings/*" element={withLayout(<Settings />)} />
+      <Route path="/billing" element={withLayout(<Billing />, 'company_admin')} />
+      <Route path="/settings/*" element={withLayout(<Settings />, 'company_admin')} />
 
       {/* Super Admin routes */}
       <Route path="/admin" element={withLayout(<Dashboard />, 'super_admin')} />

@@ -54,6 +54,7 @@ const managementNav: NavItem[] = [
 ];
 
 const accountNav: NavItem[] = [
+  { title: 'Billing', url: '/billing', icon: CreditCard, roles: ADMIN_ONLY },
   { title: 'Settings', url: '/settings', icon: Settings, roles: ADMIN_ONLY },
 ];
 
